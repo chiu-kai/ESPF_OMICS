@@ -82,7 +82,7 @@ def log_gradient_norms(model):
     print(f"Total Gradient Norm: {total_norm:.4f}")
     return total_norm
 
-def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,Transformer, threshold, few_weight, more_weight, correlation='' ):
+def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,Transformer, weighted_threshold, few_weight, more_weight, correlation='' ):
     torch.manual_seed(42)
     eval_outputs = [] # for correlation
     eval_targets = [] # for correlation
@@ -97,6 +97,7 @@ def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,T
             
             mask = ~torch.isnan(target)# Create a mask for non-NaN values in tensor # 去除nan的項
             target = target[mask]# Apply the mask to filter out NaN values from both tensors
+            outputs_unknownAUC = outputs
             outputs = outputs[mask] #dtype = 'float32'
             # if isinstance(activation_func_final, nn.Sigmoid): # if ReLU(), no need
             #     outputs = outputs*valueMultiply
@@ -110,8 +111,9 @@ def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,T
                 #     assert batch_val_loss.requires_grad == False  # Ensure no gradients are computed
                 #     total_eval_loss += (batch_val_loss.cpu().detach().numpy())/ (valueMultiply**2 if isinstance(criterion, nn.MSELoss) else valueMultiply)
                 # else:  # Custom_LossFunction
-                weights = torch.where(target > threshold, few_weight, more_weight)
-                batch_val_loss = criterion(outputs.reshape(-1), target.to(torch.float32).reshape(-1), model,weights)
+                if weighted_threshold is not None:
+                    weights = torch.where(target > weighted_threshold, few_weight, more_weight)
+                batch_val_loss = criterion(outputs.reshape(-1), target.to(torch.float32).reshape(-1), model, weights)
                 # assert batch_val_loss.requires_grad == False  # Ensure no gradients are computed
                 total_eval_loss += (batch_val_loss.cpu().detach().numpy())
                     
@@ -129,7 +131,7 @@ def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,T
     # for inference after train epoch loop, and store output for correlation
     elif correlation in ['train', 'val', 'test','whole']:
         # print(f'Evaluation {correlation} Loss: {mean_batch_eval_loss:.8f}')
-        return mean_batch_eval_loss, eval_targets, eval_outputs
+        return mean_batch_eval_loss, eval_targets, eval_outputs, outputs_unknownAUC
     else:
         print('error occur when correlation argument is not correct')
         return 'error occur when correlation argument is not correct'
@@ -137,7 +139,7 @@ def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,T
 
 
 
-def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrease_percent, continuous, learning_rate, criterion, train_loader, val_loader, device,ESPF,Transformer,seed, kfoldCV,threshold, few_weight, more_weight):
+def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrease_percent, continuous, learning_rate, criterion, train_loader, val_loader, device,ESPF,Transformer,seed, kfoldCV,weighted_threshold, few_weight, more_weight):
     # Training with early stopping (assuming you've defined the EarlyStopping logic)
     if warmup_iters is not None:
         lr_scheduler = warmup_lr_scheduler(optimizer, warmup_iters, Decrease_percent,continuous)
@@ -174,8 +176,9 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
                 # if isinstance(criterion, (nn.MSELoss, nn.L1Loss)):
                 #     loss = criterion(outputs.reshape(-1), target.to(torch.float32).reshape(-1))
                 # else:  # Custom_LossFunction
-                weights = torch.where(target > threshold, few_weight, more_weight)
-                loss = criterion(outputs.reshape(-1), target.to(torch.float32).reshape(-1), model,weights)
+                if weighted_threshold is not None:
+                    weights = torch.where(target > weighted_threshold, few_weight, more_weight)
+                loss = criterion(outputs.reshape(-1), target.to(torch.float32).reshape(-1), model, weights)
                 # assert loss.requires_grad == True  # Ensure gradients are being computed
                 loss.backward()  # Compute gradients
                 gradient_norms_list = Grad_tracker.check_and_log(model)  # Check and log gradient norms
@@ -189,7 +192,7 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
         train_epoch_loss_list.append(mean_batch_train_loss) # mean_batch_train_loss = epoch_train_loss
         # print(f'Epoch [{epoch + 1}/{num_epoch}] - mean_batch Training Loss: {mean_batch_train_loss:.8f}')  
         
-        mean_batch_val_loss, val_epoch_loss_list = evaluation(model, val_epoch_loss_list, criterion, val_loader, device,ESPF,Transformer, threshold, few_weight, more_weight, correlation='plotLossCurve') # input arg kfoldCV must be None (1)
+        mean_batch_val_loss, val_epoch_loss_list = evaluation(model, val_epoch_loss_list, criterion, val_loader, device,ESPF,Transformer, weighted_threshold, few_weight, more_weight, correlation='plotLossCurve') # input arg kfoldCV must be None (1)
                                                
         if warmup_iters is not None:
             # print("lr of epoch", epoch + 1, "=>", lr_scheduler.get_lr()) 

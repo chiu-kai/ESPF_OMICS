@@ -1,5 +1,4 @@
 #main_kfold
-# pip install subword-nmt seaborn lifelines openpyxl matplotlib scikit-learn openTSNE
 import argparse
 # import shutil
 import pandas as pd
@@ -87,20 +86,22 @@ if test is True:
     AUC_df=AUC_df.iloc[:76,:42]
     print("drug_df",drug_df.shape)
     print("AUC_df",AUC_df.shape)
-
+    kfoldCV = 2
+    print("kfoldCV",kfoldCV)
+    
 # Set threshold based on the 90th percentile # 將高於threshold的AUC權重增加
-threshold = np.nanpercentile(AUC_df.values, 90)    
+weighted_threshold = np.nanpercentile(AUC_df.values, 90)    
 total_samples = (~np.isnan(AUC_df.values)).sum().item()
-few_samples = (AUC_df.values > threshold).sum().item()
+few_samples = (AUC_df.values > weighted_threshold).sum().item()
 more_samples = total_samples - few_samples
-few_weight = total_samples / (2 * few_samples)  #2.5 #0.05   
-more_weight = total_samples / (2 * more_samples)    #0.625 #     0.53984       #391,740
-print("threshold",threshold)
-print("total_samples",total_samples)
-print("few_samples",few_samples)
-print("more_samples",more_samples)
-print("few_weight",few_weight)
-print("more_weight",more_weight)
+few_weight = total_samples / (2 * few_samples)  
+more_weight = total_samples / (2 * more_samples)   
+# print("weighted_threshold",weighted_threshold)
+# print("total_samples",total_samples)
+# print("few_samples",few_samples)
+# print("more_samples",more_samples)
+# print("few_weight",few_weight)
+# print("more_weight",more_weight)
 
 #--------------------------------------------------------------------------------------------------------------------------
 # 檢查有無重複的SMILES
@@ -203,7 +204,7 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list,best_val_epoch_train_loss,attention_score_matrix , gradient_fig,gradient_norms_list = train( model,
         optimizer,      batch_size,      num_epoch,      patience,      warmup_iters,      Decrease_percent,    continuous,
         learning_rate,      criterion,      train_loader,      val_loader,
-        device,ESPF,Drug_SelfAttention, seed, kfoldCV ,threshold, few_weight, more_weight)
+        device,ESPF,Transformer, seed, kfoldCV ,weighted_threshold, few_weight, more_weight)
 
     print("best Epoch : ",best_epoch,"best_val_loss : ",best_val_loss,"best_val_epoch_train_loss : ",best_val_epoch_train_loss," batch_size : ",batch_size,
             "learning_rate : ",learning_rate," warmup_iters :" ,warmup_iters  ," with Decrease_percent : ",Decrease_percent )
@@ -216,7 +217,7 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     # Evaluation on the test set for each fold's best model to pick the best fold for later inference
     model.load_state_dict(best_weight)  
     model.to(device=device)
-    test_loss,_ = evaluation(model, val_epoch_loss_list, criterion, test_loader, device,ESPF, Drug_SelfAttention,threshold, few_weight, more_weight, correlation='plotLossCurve')
+    test_loss,_ = evaluation(model, val_epoch_loss_list, criterion, test_loader, device,ESPF, Transformer,weighted_threshold, few_weight, more_weight, correlation='plotLossCurve')
 
     kfold_losses[fold]['test'] = test_loss
     # save best fold testing loss model weight
@@ -290,18 +291,18 @@ print("Number of parameter: %.2fK" % (num_param/1e3))
 # Evaluation on the train set
 model.load_state_dict(best_fold_best_weight)  
 model.to(device=device)
-train_loss, train_targets, train_outputs = evaluation(model, val_epoch_loss_list, criterion, train_loader, device,ESPF, Drug_SelfAttention, threshold, few_weight, more_weight, correlation='train')
+train_loss, train_targets, train_outputs, _ = evaluation(model, val_epoch_loss_list, criterion, train_loader, device,ESPF, Transformer, weighted_threshold, few_weight, more_weight, correlation='train')
 # Compute and print all metrics
 metrics_calculator = MetricsCalculator()
 
 train_metrics= metrics_calculator.compute_all_metrics(np.concatenate(train_targets), np.concatenate(train_outputs),set_name='train_set')
 # metrics_calculator.print_results(set_name='train_set')
 # Evaluation on the validation set
-val_loss, val_targets, val_outputs = evaluation(model, val_epoch_loss_list, criterion, val_loader, device,ESPF, Drug_SelfAttention, threshold, few_weight, more_weight, correlation='val')
+val_loss, val_targets, val_outputs, _ = evaluation(model, val_epoch_loss_list, criterion, val_loader, device,ESPF, Transformer, weighted_threshold, few_weight, more_weight, correlation='val')
 val_metrics= metrics_calculator.compute_all_metrics(np.concatenate(val_targets), np.concatenate(val_outputs),set_name='val_set')
 # metrics_calculator.print_results(set_name='val_set')
 # Evaluation on the test set
-test_loss, test_targets, test_outputs = evaluation(model, val_epoch_loss_list, criterion, test_loader, device,ESPF, Drug_SelfAttention, threshold, few_weight, more_weight, correlation='test')
+test_loss, test_targets, test_outputs, _ = evaluation(model, val_epoch_loss_list, criterion, test_loader, device,ESPF, Transformer, weighted_threshold, few_weight, more_weight, correlation='test')
 test_metrics= metrics_calculator.compute_all_metrics(np.concatenate(test_targets), np.concatenate(test_outputs),set_name='test_set')
 # metrics_calculator.print_results(set_name='test_set')
 
@@ -351,7 +352,7 @@ with open(output_file, "w") as file:
     file.write(f"Best fold {best_fold} , {criterion.loss_type} test Loss: {best_test_loss:.7f}\n") # = (kfold_losses[best_fold]['test'])
 
 
-    file.write(f'criterion: {criterion.loss_type}\n')
+    file.write(f'criterion: {criterion.loss_type}, weight_regularization: {criterion.regular_type}, regular_lambda: {criterion.regular_lambda}, penalty_value:{criterion.penalty_value}\n\n')
     # Calculate mean and standard deviation of the all folds loss
     for loss_type in ['train', 'val', 'test']:
         Folds_losses = [fold_data[loss_type] for fold_data in kfold_losses.values()]

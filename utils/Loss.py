@@ -5,14 +5,15 @@ import torch
 import torch.nn as nn
 
 # Example usage:
-# criterion = Custom_LossFunction(loss_type="RMSE", loss_lambda=1.0, regular_type=None, regular_lambda=0.001)
+# criterion = Custom_LossFunction(loss_type="RMSE", loss_lambda=1.0, regular_type=None, regular_lambda=1e-05)
 class Custom_Weighted_LossFunction(nn.Module):
-    def __init__(self, loss_type="weighted_RMSE", loss_lambda=1.0, regular_type=None, regular_lambda=0.001):
+    def __init__(self, loss_type="weighted_RMSE", loss_lambda=1.0, regular_type=None, regular_lambda=1e-05):
         super(Custom_Weighted_LossFunction, self).__init__()
         self.loss_type = loss_type
         self.loss_lambda = loss_lambda
         self.regular_type = regular_type
         self.regular_lambda = regular_lambda
+        self.penalty_value = None
 
         self.mse_loss = nn.MSELoss(reduction="none")  # Keep per-sample loss # 不要取平均 #輸出sample loss list
         self.mae_loss = nn.L1Loss(reduction="none")  # Keep per-sample loss # 不要取平均 #輸出sample loss list
@@ -64,6 +65,7 @@ class Custom_Weighted_LossFunction(nn.Module):
             else:
                 raise ValueError(f"Unsupported regularization type: {self.regular_type}")
             loss += self.regular_lambda * reg_penalty
+            self.penalty_value = self.regular_lambda * reg_penalty
 
         return loss
 
@@ -71,7 +73,8 @@ class Custom_Weighted_LossFunction(nn.Module):
         return (f"Custom_Weighted_LossFunction(loss_type={self.loss_type}, "
                 f"loss_lambda={self.loss_lambda}, "
                 f"regular_type={self.regular_type}, "
-                f"regular_lambda={self.regular_lambda})")
+                f"regular_lambda={self.regular_lambda})"
+                f"penalty_value={self.penalty_value}\n")
 
 
 
