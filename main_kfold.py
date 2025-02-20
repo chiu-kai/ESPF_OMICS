@@ -113,8 +113,8 @@ if ESPF is True:
 
     #--------------------------------------------------------------------------------------------------------------------------
     #ESPF
-    vocab_path = "./dataset/ESPF/drug_codes_chembl_freq_1500.txt" # token
-    sub_csv = pd.read_csv("./dataset/ESPF/subword_units_map_chembl_freq_1500.csv")# token with frequency
+    vocab_path = "./ESPF/drug_codes_chembl_freq_1500.txt" # token
+    sub_csv = pd.read_csv("./ESPF/subword_units_map_chembl_freq_1500.csv")# token with frequency
 
     # drug_encode = pd.Series(drug_smiles.unique()).apply(drug2emb_encoder, args=(vocab_path, sub_csv, max_drug_len))# 將drug_smiles 使用_drug2emb_encoder function編碼成subword vector
     drug_encode = pd.Series(drug_smiles).apply(drug2emb_encoder, args=(vocab_path, sub_csv, max_drug_len))
@@ -204,7 +204,7 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list,best_val_epoch_train_loss,attention_score_matrix , gradient_fig,gradient_norms_list = train( model,
         optimizer,      batch_size,      num_epoch,      patience,      warmup_iters,      Decrease_percent,    continuous,
         learning_rate,      criterion,      train_loader,      val_loader,
-        device,ESPF,Transformer, seed, kfoldCV ,weighted_threshold, few_weight, more_weight)
+        device,ESPF,Drug_SelfAttention, seed, kfoldCV ,weighted_threshold, few_weight, more_weight)
 
     print("best Epoch : ",best_epoch,"best_val_loss : ",best_val_loss,"best_val_epoch_train_loss : ",best_val_epoch_train_loss," batch_size : ",batch_size,
             "learning_rate : ",learning_rate," warmup_iters :" ,warmup_iters  ," with Decrease_percent : ",Decrease_percent )
@@ -217,7 +217,7 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     # Evaluation on the test set for each fold's best model to pick the best fold for later inference
     model.load_state_dict(best_weight)  
     model.to(device=device)
-    test_loss,_ = evaluation(model, val_epoch_loss_list, criterion, test_loader, device,ESPF, Transformer,weighted_threshold, few_weight, more_weight, correlation='plotLossCurve')
+    test_loss,_ = evaluation(model, val_epoch_loss_list, criterion, test_loader, device,ESPF, Drug_SelfAttention,weighted_threshold, few_weight, more_weight, correlation='plotLossCurve')
 
     kfold_losses[fold]['test'] = test_loss
     # save best fold testing loss model weight
@@ -291,18 +291,18 @@ print("Number of parameter: %.2fK" % (num_param/1e3))
 # Evaluation on the train set
 model.load_state_dict(best_fold_best_weight)  
 model.to(device=device)
-train_loss, train_targets, train_outputs, _ = evaluation(model, val_epoch_loss_list, criterion, train_loader, device,ESPF, Transformer, weighted_threshold, few_weight, more_weight, correlation='train')
+train_loss, train_targets, train_outputs, _ = evaluation(model, val_epoch_loss_list, criterion, train_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='train')
 # Compute and print all metrics
 metrics_calculator = MetricsCalculator()
 
 train_metrics= metrics_calculator.compute_all_metrics(np.concatenate(train_targets), np.concatenate(train_outputs),set_name='train_set')
 # metrics_calculator.print_results(set_name='train_set')
 # Evaluation on the validation set
-val_loss, val_targets, val_outputs, _ = evaluation(model, val_epoch_loss_list, criterion, val_loader, device,ESPF, Transformer, weighted_threshold, few_weight, more_weight, correlation='val')
+val_loss, val_targets, val_outputs, _ = evaluation(model, val_epoch_loss_list, criterion, val_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='val')
 val_metrics= metrics_calculator.compute_all_metrics(np.concatenate(val_targets), np.concatenate(val_outputs),set_name='val_set')
 # metrics_calculator.print_results(set_name='val_set')
 # Evaluation on the test set
-test_loss, test_targets, test_outputs, _ = evaluation(model, val_epoch_loss_list, criterion, test_loader, device,ESPF, Transformer, weighted_threshold, few_weight, more_weight, correlation='test')
+test_loss, test_targets, test_outputs, _ = evaluation(model, val_epoch_loss_list, criterion, test_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='test')
 test_metrics= metrics_calculator.compute_all_metrics(np.concatenate(test_targets), np.concatenate(test_outputs),set_name='test_set')
 # metrics_calculator.print_results(set_name='test_set')
 
