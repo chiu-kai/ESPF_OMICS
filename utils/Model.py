@@ -350,9 +350,8 @@ class Type_Encoding(nn.Module):
 
 
 # Models------------------------------------------------------------------------------------------------------------------------------------------------------
-
 class Omics_DrugESPF_Model(nn.Module):
-    def __init__(self,omics_encode_dim_dict,drug_encode_dims, activation_func,activation_func_final,dense_layer_dim, device, 
+    def __init__(self,omics_encode_dim_dict,drug_encode_dims, activation_func,activation_func_final,dense_layer_dim, device, ESPF, Drug_SelfAttention,
                  hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeaetures_dict, max_drug_len, TCGA_pretrain_weight_path_dict=None):
         super(Omics_DrugESPF_Model, self).__init__()
 
@@ -367,12 +366,6 @@ class Omics_DrugESPF_Model(nn.Module):
             else:
                 print(f"State_dict does not match the model's architecture for {model}.")
                 print("Model keys: ", model_keys, " Loaded keys: ", loaded_keys)
-        def _init_weights(model):
-            for layer in model:
-                if isinstance(layer, nn.Linear):
-                    init.kaiming_uniform_(layer.weight, a=0, mode='fan_in', nonlinearity='relu')
-                    if layer.bias is not None:
-                        init.zeros_(layer.bias)
 
 # Create subnetworks for each omic type dynamically
         self.MLP4omics_dict = nn.ModuleDict()
@@ -391,37 +384,39 @@ class Omics_DrugESPF_Model(nn.Module):
                 self._init_weights(self.MLP4omics_dict[omic_type])
 
 # Define subnetwork for drug ESPF features
-        self.emb_f = Embeddings(hidden_size,max_drug_len,hidden_dropout_prob,substructure_size = 2586)#(128,50,0.1,2586)
-        # if attention is not True  
-        self.dropout = nn.Dropout(attention_probs_dropout_prob)
-        # self.output = SelfOutput(hidden_size, hidden_dropout_prob) # (128,0.1) # apply linear and skip conneaction and LayerNorm and dropout after attention
-        # if attention is True  
-        self.TransformerEncoder = Encoder(hidden_size, intermediate_size, num_attention_heads,attention_probs_dropout_prob, hidden_dropout_prob)#(128,512,8,0.1,0.1)
+        if ESPF is True:
+            self.emb_f = Embeddings(hidden_size,max_drug_len,hidden_dropout_prob,substructure_size = 2586)#(128,50,0.1,2586)
+            # if attention is not True 
+            if Drug_SelfAttention is False: 
+                self.dropout = nn.Dropout(attention_probs_dropout_prob)
+            # self.output = SelfOutput(hidden_size, hidden_dropout_prob) # (128,0.1) # apply linear and skip conneaction and LayerNorm and dropout after attention
+            # if attention is True  
+            elif Drug_SelfAttention is False: 
+                self.TransformerEncoder = Encoder(hidden_size, intermediate_size, num_attention_heads,attention_probs_dropout_prob, hidden_dropout_prob)#(128,512,8,0.1,0.1)
         
-        
-        self.MLP4ESPF = nn.Sequential(
-            nn.Linear(max_drug_len * hidden_size, drug_encode_dims[0]),
-            activation_func,
-            nn.Dropout(hidden_dropout_prob),
-            nn.Linear(drug_encode_dims[0], drug_encode_dims[1]),
-            activation_func,
-            nn.Dropout(hidden_dropout_prob),
-            nn.Linear(drug_encode_dims[1], drug_encode_dims[2]),
-            activation_func)
-        # Initialize weights with Kaiming uniform initialization, bias with aero
-        self._init_weights(self.MLP4ESPF)
-
-        self.MLP4MACCS = nn.Sequential( # 166->[110,55,22]
-            nn.Linear(166, drug_encode_dims[0]),
-            activation_func,
-            # nn.Dropout(hidden_dropout_prob),
-            nn.Linear(drug_encode_dims[0], drug_encode_dims[1]),
-            activation_func,
-            # nn.Dropout(hidden_dropout_prob),
-            nn.Linear(drug_encode_dims[1], drug_encode_dims[2]),
-            activation_func)
-        # Initialize weights with Kaiming uniform initialization, bias with aero
-        self._init_weights(self.MLP4MACCS)
+            self.MLP4ESPF = nn.Sequential(
+                nn.Linear(max_drug_len * hidden_size, drug_encode_dims[0]),
+                activation_func,
+                nn.Dropout(hidden_dropout_prob),
+                nn.Linear(drug_encode_dims[0], drug_encode_dims[1]),
+                activation_func,
+                nn.Dropout(hidden_dropout_prob),
+                nn.Linear(drug_encode_dims[1], drug_encode_dims[2]),
+                activation_func)
+            # Initialize weights with Kaiming uniform initialization, bias with aero
+            self._init_weights(self.MLP4ESPF)
+        else: # MACCS166
+            self.MLP4MACCS = nn.Sequential( # 166->[110,55,22]
+                nn.Linear(166, drug_encode_dims[0]),
+                activation_func,
+                # nn.Dropout(hidden_dropout_prob),
+                nn.Linear(drug_encode_dims[0], drug_encode_dims[1]),
+                activation_func,
+                # nn.Dropout(hidden_dropout_prob),
+                nn.Linear(drug_encode_dims[1], drug_encode_dims[2]),
+                activation_func)
+            # Initialize weights with Kaiming uniform initialization, bias with aero
+            self._init_weights(self.MLP4MACCS)
   
 # Define the final prediction network 
         self.model_final_add = nn.Sequential(
@@ -438,8 +433,13 @@ class Omics_DrugESPF_Model(nn.Module):
 
         self.print_flag = True
         self.attention_probs = None
-
-
+    
+    def _init_weights(self, model):
+        for layer in model:
+            if isinstance(layer, nn.Linear):
+                init.kaiming_uniform_(layer.weight, a=0, mode='fan_in', nonlinearity='relu')
+                if layer.bias is not None:
+                    init.zeros_(layer.bias)
     def forward(self, omics_tensor_dict,drug, device,ESPF,Drug_SelfAttention):
 
         omic_embeddings = []
@@ -494,7 +494,3 @@ class Omics_DrugESPF_Model(nn.Module):
         combined_mut_drug_embed = torch.cat([omic_embeddings, drug_final_emb], dim=1)#dim=1: turn into 1D
         output = self.model_final_add(combined_mut_drug_embed)
         return output, self.attention_probs
-    
-
-
-        

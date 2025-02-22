@@ -200,13 +200,14 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     # train
     # Init the neural network 
     set_seed(seed)
-    model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device,
+    model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
                             TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
     model.to(device=device)
 
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)# Initialize optimizer
 
+ 
     best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list,best_val_epoch_train_loss,attention_score_matrix , gradient_fig,gradient_norms_list = train( model,
         optimizer,      batch_size,      num_epoch,      patience,      warmup_iters,      Decrease_percent,    continuous,
         learning_rate,      criterion,      train_loader,      val_loader,
@@ -287,7 +288,7 @@ val_dataset = Subset(dataset, best_fold_id_val.tolist())
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
 # set_seed(seed)
-model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device,
+model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention,
                         drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
                         TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict).to(device=device)
 num_param = sum([param.nelement() for param in model.parameters()])

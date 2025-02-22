@@ -209,8 +209,8 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
             if counter >= patience:
                 print(f'Early stopping after {patience} epochs of no improvement.')
                 break
-
+        
     gradient_fig = Grad_tracker.plot_gradient_norms()
-
+    
     return best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list, best_val_epoch_train_loss,attention_score_matrix, gradient_fig, gradient_norms_list
 

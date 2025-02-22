@@ -40,12 +40,12 @@ class Omics_MACCS_Model(nn.Module):#Omics_DrugESPF_Model
             else:
                 print(f"State_dict does not match the model's architecture for {model}.")
                 print("Model keys: ", model_keys, " Loaded keys: ", loaded_keys)
-        def _init_weights(model):
-            for layer in model:
-                if isinstance(layer, nn.Linear):
-                    init.kaiming_uniform_(layer.weight, a=0, mode='fan_in', nonlinearity='relu')
-                    if layer.bias is not None:
-                        init.zeros_(layer.bias)
+        # def _init_weights(model):
+        #     for layer in model:
+        #         if isinstance(layer, nn.Linear):
+        #             init.kaiming_uniform_(layer.weight, a=0, mode='fan_in', nonlinearity='relu')
+        #             if layer.bias is not None:
+        #                 init.zeros_(layer.bias)
 
 # Create subnetworks for each omic type dynamically
         self.MLP4omics_dict = nn.ModuleDict()
@@ -89,6 +89,12 @@ class Omics_MACCS_Model(nn.Module):#Omics_DrugESPF_Model
         # Initialize weights with Kaiming uniform initialization, bias with aero
         self._init_weights(self.model_final_add)
 
+    def _init_weights(self, model):
+            for layer in model:
+                if isinstance(layer, nn.Linear):
+                    init.kaiming_uniform_(layer.weight, a=0, mode='fan_in', nonlinearity='relu')
+                    if layer.bias is not None:
+                        init.zeros_(layer.bias)
     def forward(self, omics_tensor_dict,drug, device):
 
         omic_embeddings = []
@@ -101,8 +107,7 @@ class Omics_MACCS_Model(nn.Module):#Omics_DrugESPF_Model
         # Drug feature
         drug = drug.to(torch.float32) # long -> float, because the input of linear layer should be float,才能和float的weight相乘
         drug_final_emb = self.MLP4MACCS(drug.to(device=device))# 166->[110,55,22] # to device, because the weight is on device
-        
-        
+
         # Concatenate embeddings from all subnetworks
         combined_mut_drug_embed = torch.cat([omic_embeddings, drug_final_emb], dim=1)#dim=1: turn into 1D
         output = self.model_final_add(combined_mut_drug_embed)
