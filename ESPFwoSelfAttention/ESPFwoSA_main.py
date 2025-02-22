@@ -1,5 +1,5 @@
+#ESPFwoSA_main.py
 #main_kfold
-# pip install subword-nmt seaborn lifelines openpyxl matplotlib scikit-learn openTSNE
 import argparse
 # import shutil
 import pandas as pd
@@ -19,8 +19,7 @@ import gc
 import os
 import importlib.util
 
-from utils.ESPF_drug2emb import drug2emb_encoder
-from utils.Model import Omics_DrugESPF_Model
+from utils.Omics_ESPFwoSA_Model import Omics_ESPFwoSA_Model
 from utils.split_data_id import split_id,repeat_func
 from utils.create_dataloader import OmicsDrugDataset
 from utils.train import train, evaluation
@@ -66,8 +65,8 @@ for omic_type in include_omics:
 #----------------------------------------------------------------------------------------------------------------------
 #load data
 # data_mut, gene_names_mut,ccl_names_mut  = load_ccl("/root/data/CCLE/CCLE_match_TCGAgene_PRISMandEXPsample_binary_mutation_476_6009.txt")
-drug_df= pd.read_csv("../data/no_Imputation_PRISM_Repurposing_Secondary_Screen_data/MACCS(Secondary_Screen_treatment_info)_union_NOrepeat.csv", sep=',', index_col=0)
-AUC_df = pd.read_csv("../data/no_Imputation_PRISM_Repurposing_Secondary_Screen_data/Drug_sensitivity_AUC_(PRISM_Repurposing_Secondary_Screen)_subsetted_NOrepeat.csv", sep=',', index_col=0)
+drug_df= pd.read_csv("../../data/no_Imputation_PRISM_Repurposing_Secondary_Screen_data/MACCS(Secondary_Screen_treatment_info)_union_NOrepeat.csv", sep=',', index_col=0)
+AUC_df = pd.read_csv("../../data/no_Imputation_PRISM_Repurposing_Secondary_Screen_data/Drug_sensitivity_AUC_(PRISM_Repurposing_Secondary_Screen)_subsetted_NOrepeat.csv", sep=',', index_col=0)
 # data_AUC_matrix, drug_names_AUC, ccl_names_AUC = load_AUC_matrix(splitType,"/root/Winnie/no_Imputation_PRISM_Repurposing_Secondary_Screen_data/Drug_sensitivity_AUC_(PRISM_Repurposing_Secondary_Screen)_subsetted.csv") # splitType = "byCCL" or "byDrug" 決定AUCmatrix要不要轉置
 
 # matched AUCfile and omics_data samples
@@ -89,7 +88,7 @@ if test is True:
     print("AUC_df",AUC_df.shape)
     kfoldCV = 2
     print("kfoldCV",kfoldCV)
-
+    
 if 'weighted' in criterion.loss_type :    
     # Set threshold based on the 90th percentile # 將高於threshold的AUC權重增加
     weighted_threshold = np.nanpercentile(AUC_df.values, 90)    
@@ -110,38 +109,12 @@ else:
     more_weight = None
 
 #--------------------------------------------------------------------------------------------------------------------------
-# 檢查有無重複的SMILES
-if ESPF is True:
-    drug_smiles =drug_df["smiles"] # 
-    drug_names =drug_df.index
-    # 挑出重複的SMILES
-    duplicate =  drug_smiles[drug_smiles.duplicated(keep=False)]
+drug_encode = drug_df["MACCS166bits"]
+drug_encode_list = [list(map(int, item.split(','))) for item in drug_encode.values]
+print("MACCS166bits_drug_encode_list type: ",type(drug_encode_list))
+# Convert your data to tensors if they're in numpy
+drug_features_tensor = torch.tensor(np.array(drug_encode_list), dtype=torch.long)
 
-    #--------------------------------------------------------------------------------------------------------------------------
-    #ESPF
-    vocab_path = "./ESPF/drug_codes_chembl_freq_1500.txt" # token
-    sub_csv = pd.read_csv("./ESPF/subword_units_map_chembl_freq_1500.csv")# token with frequency
-
-    # drug_encode = pd.Series(drug_smiles.unique()).apply(drug2emb_encoder, args=(vocab_path, sub_csv, max_drug_len))# 將drug_smiles 使用_drug2emb_encoder function編碼成subword vector
-    drug_encode = pd.Series(drug_smiles).apply(drug2emb_encoder, args=(vocab_path, sub_csv, max_drug_len))
-    # uniq_smile_dict = dict(zip(drug_smiles.unique(),drug_encode))# zip drug_smiles和其subword vector編碼 成字典
-
-    # print(type(smile_encode))
-    # print(smile_encode.shape)
-    # print(type(smile_encode.index))
-    # print((drug_encode.index.values).shape)#(42,)
-    # print((drug_encode).shape)#(42,)
-    # print(type(drug_encode))#<class 'pandas.core.series.Series'>
-    #print((drug_encode.values).shape)#(42,)
-    # print(drug_encode.values.tolist())
-    # Convert your data to tensors if they're in numpy
-    drug_features_tensor = torch.tensor(np.array(drug_encode.values.tolist()), dtype=torch.long)
-else:
-    drug_encode = drug_df["MACCS166bits"]
-    drug_encode_list = [list(map(int, item.split(','))) for item in drug_encode.values]
-    print("MACCS166bits_drug_encode_list type: ",type(drug_encode_list))
-    # Convert your data to tensors if they're in numpy
-    drug_features_tensor = torch.tensor(np.array(drug_encode_list), dtype=torch.long)
 #--------------------------------------------------------------------------------------------------------------------------
 num_ccl = list(omics_data_dict.values())[0].shape[0]
 num_drug = drug_encode.shape[0]
@@ -200,17 +173,16 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     # train
     # Init the neural network 
     set_seed(seed)
-    model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device,
-                            drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-                            TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+    model = Omics_ESPFwoSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device,
+                              omics_numfeatures_dict, TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
     model.to(device=device)
 
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)# Initialize optimizer
 
-    best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list,best_val_epoch_train_loss,attention_score_matrix , gradient_fig,gradient_norms_list = train( model,
+    best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list,best_val_epoch_train_loss , gradient_fig,gradient_norms_list = train( model,
         optimizer,      batch_size,      num_epoch,      patience,      warmup_iters,      Decrease_percent,    continuous,
         learning_rate,      criterion,      train_loader,      val_loader,
-        device,ESPF,Drug_SelfAttention, seed, kfoldCV ,weighted_threshold, few_weight, more_weight)
+        device, seed, kfoldCV ,weighted_threshold, few_weight, more_weight)
 
     print("best Epoch : ",best_epoch,"best_val_loss : ",best_val_loss,"best_val_epoch_train_loss : ",best_val_epoch_train_loss," batch_size : ",batch_size,
             "learning_rate : ",learning_rate," warmup_iters :" ,warmup_iters  ," with Decrease_percent : ",Decrease_percent )
@@ -223,7 +195,7 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     # Evaluation on the test set for each fold's best model to pick the best fold for later inference
     model.load_state_dict(best_weight)  
     model.to(device=device)
-    test_loss,_ = evaluation(model, val_epoch_loss_list, criterion, test_loader, device,ESPF, Drug_SelfAttention,weighted_threshold, few_weight, more_weight, correlation='plotLossCurve')
+    test_loss,_ = evaluation(model, val_epoch_loss_list, criterion, test_loader, device, weighted_threshold, few_weight, more_weight, correlation='plotLossCurve')
 
     kfold_losses[fold]['test'] = test_loss
     # save best fold testing loss model weight
@@ -287,9 +259,8 @@ val_dataset = Subset(dataset, best_fold_id_val.tolist())
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
 # set_seed(seed)
-model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device,
-                        drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-                        TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict).to(device=device)
+model = Omics_ESPFwoSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device,
+                          omics_numfeatures_dict, TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict).to(device=device)
 num_param = sum([param.nelement() for param in model.parameters()])
 print("Number of parameter: %.2fK" % (num_param/1e3))
 
@@ -297,18 +268,18 @@ print("Number of parameter: %.2fK" % (num_param/1e3))
 # Evaluation on the train set
 model.load_state_dict(best_fold_best_weight)  
 model.to(device=device)
-train_loss, train_targets, train_outputs, _ = evaluation(model, val_epoch_loss_list, criterion, train_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='train')
+train_loss, train_targets, train_outputs, _ = evaluation(model, val_epoch_loss_list, criterion, train_loader, device, weighted_threshold, few_weight, more_weight, correlation='train')
 # Compute and print all metrics
 metrics_calculator = MetricsCalculator()
 
 train_metrics= metrics_calculator.compute_all_metrics(np.concatenate(train_targets), np.concatenate(train_outputs),set_name='train_set')
 # metrics_calculator.print_results(set_name='train_set')
 # Evaluation on the validation set
-val_loss, val_targets, val_outputs, _ = evaluation(model, val_epoch_loss_list, criterion, val_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='val')
+val_loss, val_targets, val_outputs, _ = evaluation(model, val_epoch_loss_list, criterion, val_loader, device, weighted_threshold, few_weight, more_weight, correlation='val')
 val_metrics= metrics_calculator.compute_all_metrics(np.concatenate(val_targets), np.concatenate(val_outputs),set_name='val_set')
 # metrics_calculator.print_results(set_name='val_set')
 # Evaluation on the test set
-test_loss, test_targets, test_outputs, _ = evaluation(model, val_epoch_loss_list, criterion, test_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='test')
+test_loss, test_targets, test_outputs, _ = evaluation(model, val_epoch_loss_list, criterion, test_loader, device, weighted_threshold, few_weight, more_weight, correlation='test')
 test_metrics= metrics_calculator.compute_all_metrics(np.concatenate(test_targets), np.concatenate(test_outputs),set_name='test_set')
 # metrics_calculator.print_results(set_name='test_set')
 

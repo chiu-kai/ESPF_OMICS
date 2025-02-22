@@ -1,9 +1,10 @@
+# pip install subword-nmt seaborn lifelines openpyxl matplotlib scikit-learn openTSNE
 # python3 ./main_kfold.py --config utils/config.py
 import torch.nn as nn
 from utils.Loss import Custom_LossFunction,Custom_Weighted_LossFunction
 from utils.Custom_Activation_Function import ScaledSigmoid
 
-test = False #False, True: batch_size = 3, num_epoch = 2, full dataset
+test = True #False, True: batch_size = 3, num_epoch = 2, full dataset
 
 omics_files = {
     'Mut': "../data/CCLE/CCLE_match_TCGAgene_PRISMandEXPsample_binary_mutation_476_6009.txt",
@@ -26,7 +27,7 @@ seed = 42
 model_name = "Omics_DrugESPF_Model"
 AUCtransform = "-log2" #"-log2"
 splitType= 'byDrug' # byCCL byDrug
-kfoldCV = 5
+kfoldCV = 2
 include_omics = ['Exp']
 max_drug_len=50 # 不夠補零補到50 / 超過取前50個subwords(index) !!!!須改方法!!!!
 drug_embedding_feature_size = 128

@@ -82,7 +82,7 @@ def log_gradient_norms(model):
     print(f"Total Gradient Norm: {total_norm:.4f}")
     return total_norm
 
-def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='' ):
+def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device, weighted_threshold, few_weight, more_weight, correlation='' ):
     torch.manual_seed(42)
     eval_outputs = [] # for correlation
     eval_targets = [] # for correlation
@@ -93,7 +93,7 @@ def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,D
     with torch.no_grad():
         for batch_idx,inputs in enumerate(eval_loader):
             omics_tensor_dict,drug, target = inputs[0],inputs[1], inputs[-1].to(device=device)
-            outputs,_ = model(omics_tensor_dict, drug, device,ESPF,Drug_SelfAttention) #drug.to(torch.float32)
+            outputs = model(omics_tensor_dict, drug, device) #drug.to(torch.float32)
             
             mask = ~torch.isnan(target)# Create a mask for non-NaN values in tensor # 去除nan的項
             target = target[mask]# Apply the mask to filter out NaN values from both tensors
@@ -139,7 +139,7 @@ def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,D
 
 
 
-def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrease_percent, continuous, learning_rate, criterion, train_loader, val_loader, device,ESPF,Drug_SelfAttention,seed, kfoldCV,weighted_threshold, few_weight, more_weight):
+def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrease_percent, continuous, learning_rate, criterion, train_loader, val_loader, device,seed, kfoldCV,weighted_threshold, few_weight, more_weight):
     # Training with early stopping (assuming you've defined the EarlyStopping logic)
     if warmup_iters is not None:
         lr_scheduler = warmup_lr_scheduler(optimizer, warmup_iters, Decrease_percent,continuous)
@@ -162,7 +162,7 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
             omics_tensor_dict,drug = inputs[0],inputs[1]
             target = inputs[2].to(device=device)
             
-            outputs,attention_score_matrix = model(omics_tensor_dict, drug, device,ESPF,Drug_SelfAttention) #drug.to(torch.float32)
+            outputs = model(omics_tensor_dict, drug, device) #drug.to(torch.float32)
             
             mask = ~torch.isnan(target,)# Create a mask for non-NaN values in tensor # 0:nan, 1:non-nan
 
@@ -192,7 +192,7 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
         train_epoch_loss_list.append(mean_batch_train_loss) # mean_batch_train_loss = epoch_train_loss
         # print(f'Epoch [{epoch + 1}/{num_epoch}] - mean_batch Training Loss: {mean_batch_train_loss:.8f}')  
         
-        mean_batch_val_loss, val_epoch_loss_list = evaluation(model, val_epoch_loss_list, criterion, val_loader, device,ESPF,Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='plotLossCurve') # input arg kfoldCV must be None (1)
+        mean_batch_val_loss, val_epoch_loss_list = evaluation(model, val_epoch_loss_list, criterion, val_loader, device, weighted_threshold, few_weight, more_weight, correlation='plotLossCurve') # input arg kfoldCV must be None (1)
                                                
         if warmup_iters is not None:
             # print("lr of epoch", epoch + 1, "=>", lr_scheduler.get_lr()) 
@@ -212,5 +212,5 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
 
     gradient_fig = Grad_tracker.plot_gradient_norms()
 
-    return best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list, best_val_epoch_train_loss,attention_score_matrix, gradient_fig, gradient_norms_list
+    return best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list, best_val_epoch_train_loss, gradient_fig, gradient_norms_list
 
