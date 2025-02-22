@@ -208,7 +208,7 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)# Initialize optimizer
 
  
-    best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list,best_val_epoch_train_loss,attention_score_matrix , gradient_fig,gradient_norms_list = train( model,
+    best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list,best_val_epoch_train_loss,best_epoch_attention_score_matrix , gradient_fig,gradient_norms_list = train( model,
         optimizer,      batch_size,      num_epoch,      patience,      warmup_iters,      Decrease_percent,    continuous,
         learning_rate,      criterion,      train_loader,      val_loader,
         device,ESPF,Drug_SelfAttention, seed, kfoldCV ,weighted_threshold, few_weight, more_weight)
@@ -224,7 +224,8 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     # Evaluation on the test set for each fold's best model to pick the best fold for later inference
     model.load_state_dict(best_weight)  
     model.to(device=device)
-    test_loss,_ = evaluation(model, val_epoch_loss_list, criterion, test_loader, device,ESPF, Drug_SelfAttention,weighted_threshold, few_weight, more_weight, correlation='plotLossCurve')
+    
+    test_loss,_,_,_ = evaluation(model, None, criterion, test_loader, device,ESPF, Drug_SelfAttention,weighted_threshold, few_weight, more_weight, correlation='test')
 
     kfold_losses[fold]['test'] = test_loss
     # save best fold testing loss model weight
@@ -238,6 +239,7 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
         best_fold = fold
         best_fold_id_unrepeat_train= id_unrepeat_train# for correlation
         best_fold_id_unrepeat_val= id_unrepeat_val  
+        best_fold_best_epoch_attention_score_matrix=best_epoch_attention_score_matrix
     # print("best_fold_best_weight",best_fold_best_weight["MLP4omics_dict.Mut.0.weight"][0])    
     del model
     # Set the current device

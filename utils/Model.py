@@ -194,9 +194,9 @@ class SelfAttention(nn.Module):
         attention_probs_0 = nn.Softmax(dim=-1)(attention_scores) # attSention_probs:torch.Size([bsz, 8, 50, 50])
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs_0)
+        attention_probs_drop = self.dropout(attention_probs_0)
 
-        context_layer = torch.matmul(attention_probs, value_layer) #context_layer:torch.Size([bsz, 8, 50, 16])
+        context_layer = torch.matmul(attention_probs_drop, value_layer) #context_layer:torch.Size([bsz, 8, 50, 16])
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous() #context_layer:torch.Size([bsz, 50, 8, 16])
         # context_layer.size()[:-2] torch.Size([bsz, 50])
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,) #new_context_layer_shape:torch.Size([bsz, 50, 128]) #(128,)
@@ -432,7 +432,7 @@ class Omics_DrugESPF_Model(nn.Module):
         self._init_weights(self.model_final_add)
 
         self.print_flag = True
-        self.attention_probs = None
+        self.attention_probs = None # store Attention score matrix
     
     def _init_weights(self, model):
         for layer in model:
@@ -472,10 +472,10 @@ class Omics_DrugESPF_Model(nn.Module):
                     self.print_flag  = False
                 mask = mask.unsqueeze(1).unsqueeze(2) # mask.shape: torch.Size([bsz, 1, 1, 50])
                 mask = (1.0 - mask) * -10000.0
-                drug_emb_masked, attention_probs  = self.TransformerEncoder(drug_embed, mask)# hidden_states:drug_embed.shape:torch.Size([bsz, 50, 128]); mask: ex_e_mask:torch.Size([bsz, 1, 1, 50])
+                drug_emb_masked, attention_probs_0  = self.TransformerEncoder(drug_embed, mask)# hidden_states:drug_embed.shape:torch.Size([bsz, 50, 128]); mask: ex_e_mask:torch.Size([bsz, 1, 1, 50])
                 # drug_emb_masked: torch.Size([bsz, 50, 128]) 
-                # attention_probs_0 = nn.Softmax(dim=-1)(attention_scores) # attention_probs_0:torch.Size([bsz, 8, 50, 50])
-                self.attention_probs = attention_probs
+                # attention_probs_0 = nn.Softmax(dim=-1)(attention_scores) # attention_probs_0:torch.Size([bsz, 8, 50, 50])(without dropout)
+                self.attention_probs = attention_probs_0
             elif Drug_SelfAttention is None:
                     print("\n Drug_SelfAttention is assign to None , please assign to False or True \n")
 

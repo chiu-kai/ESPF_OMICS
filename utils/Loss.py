@@ -31,28 +31,28 @@ class Custom_Weighted_LossFunction(nn.Module):
         """
         # Compute base loss
         if self.loss_type == "weighted_RMSE":
-            per_sample_loss = torch.sqrt(self.mse_loss(prediction, target))
+            batch_sample_loss = torch.sqrt(self.mse_loss(prediction, target))
         elif self.loss_type == "weighted_MSE":
-            per_sample_loss = self.mse_loss(prediction, target)
+            batch_sample_loss = self.mse_loss(prediction, target)
         elif self.loss_type == "weighted_MAE":
-            per_sample_loss = self.mae_loss(prediction, target)
+            batch_sample_loss = self.mae_loss(prediction, target)
         elif self.loss_type == "weighted_MAE+MSE":
             mae = self.mae_loss(prediction, target)
             mse = self.mse_loss(prediction, target)
-            per_sample_loss = mae + self.loss_lambda * mse
+            batch_sample_loss = mae + self.loss_lambda * mse
         elif self.loss_type == "weighted_MAE+RMSE":
             mae = self.mae_loss(prediction, target)
             mse = self.mse_loss(prediction, target)
-            per_sample_loss = mae + self.loss_lambda * torch.sqrt(mse)
+            batch_sample_loss = mae + self.loss_lambda * torch.sqrt(mse)
         else:
             raise ValueError(f"Unsupported loss type: {self.loss_type}")
         
         # Apply weight to each sample loss 
         if weights is not None:
-            per_sample_loss *= weights 
+            batch_sample_loss *= weights 
 
         # Aggregate loss (mean over batch)
-        loss = per_sample_loss.mean()
+        loss = batch_sample_loss.mean()
 
         # Add regularization penalty if specified
         if self.regular_type and model:

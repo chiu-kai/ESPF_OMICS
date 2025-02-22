@@ -97,7 +97,7 @@ def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,D
             
             mask = ~torch.isnan(target)# Create a mask for non-NaN values in tensor # 去除nan的項
             target = target[mask]# Apply the mask to filter out NaN values from both tensors
-            predictedAUCwithoutGT = outputs
+            predictedAUCwithoutGT = outputs # for unknown GroundTruth
             outputs = outputs[mask] #dtype = 'float32'
             # if isinstance(activation_func_final, nn.Sigmoid): # if ReLU(), no need
             #     outputs = outputs*valueMultiply
@@ -123,18 +123,18 @@ def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,D
             # print("total_eval_loss",total_eval_loss,"batch_idx_without_nan_count",batch_idx_without_nan_count)
             mean_batch_eval_loss = (total_eval_loss/(batch_idx_without_nan_count)).astype('float32') # batches' average loss as one epoch's loss
 
-    # just for evaluation in train epoch loop , and plot the epochs loss, not for correlation
-    if correlation=='plotLossCurve': 
-        # print(f'Epoch [{epoch + 1}/{num_epoch}] - mean_batch Validation Loss: {mean_batch_eval_loss:.8f}')
-        val_epoch_loss_list.append(mean_batch_eval_loss)
-        return mean_batch_eval_loss, val_epoch_loss_list
-    # for inference after train epoch loop, and store output for correlation
-    elif correlation in ['train', 'val', 'test','whole']:
-        # print(f'Evaluation {correlation} Loss: {mean_batch_eval_loss:.8f}')
-        return mean_batch_eval_loss, eval_targets, eval_outputs, predictedAUCwithoutGT
-    else:
-        print('error occur when correlation argument is not correct')
-        return 'error occur when correlation argument is not correct'
+        # just for evaluation in train epoch loop , and plot the epochs loss, not for correlation
+        if correlation=='plotLossCurve': 
+            # print(f'Epoch [{epoch + 1}/{num_epoch}] - mean_batch Validation Loss: {mean_batch_eval_loss:.8f}')
+            val_epoch_loss_list.append(mean_batch_eval_loss)
+            return mean_batch_eval_loss, val_epoch_loss_list
+        # for inference after train epoch loop, and store output for correlation
+        elif correlation in ['train', 'val', 'test','whole']:
+            # print(f'Evaluation {correlation} Loss: {mean_batch_eval_loss:.8f}')
+            return mean_batch_eval_loss, eval_targets, eval_outputs, predictedAUCwithoutGT
+        else:
+            print('error occur when correlation argument is not correct')
+            return 'error occur when correlation argument is not correct'
 
 
 
@@ -163,7 +163,7 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
             target = inputs[2].to(device=device)
             
             outputs,attention_score_matrix = model(omics_tensor_dict, drug, device,ESPF,Drug_SelfAttention) #drug.to(torch.float32)
-            
+            # attention_score_matrix torch.Size([bsz, 8, 50, 50])# softmax(without dropout)
             mask = ~torch.isnan(target,)# Create a mask for non-NaN values in tensor # 0:nan, 1:non-nan
 
             target = target[mask]# Apply the mask to filter out NaN values from both tensors # 去除nan的項 [nan, 0.7908]->[0.7908]
@@ -204,6 +204,7 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
             best_epoch = epoch+1 # bestepoch
             counter = 0
             best_val_epoch_train_loss = mean_batch_train_loss
+            best_epoch_attention_score_matrix = attention_score_matrix
         else:
             counter += 1
             if counter >= patience:
@@ -212,5 +213,4 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
         
     gradient_fig = Grad_tracker.plot_gradient_norms()
     
-    return best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list, best_val_epoch_train_loss,attention_score_matrix, gradient_fig, gradient_norms_list
-
+    return best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list, best_val_epoch_train_loss,best_epoch_attention_score_matrix, gradient_fig, gradient_norms_list
