@@ -4,7 +4,7 @@ import torch.nn as nn
 from utils.Loss import Custom_LossFunction,Custom_Weighted_LossFunction
 from utils.Custom_Activation_Function import ScaledSigmoid
 
-test = True #False, True: batch_size = 3, num_epoch = 2, full dataset
+test = False #False, True: batch_size = 3, num_epoch = 2, full dataset
 
 omics_files = {
     'Mut': "../data/CCLE/CCLE_match_TCGAgene_PRISMandEXPsample_binary_mutation_476_6009.txt",
@@ -27,16 +27,17 @@ seed = 42
 model_name = "Omics_DrugESPF_Model"
 AUCtransform = "-log2" #"-log2"
 splitType= 'byDrug' # byCCL byDrug
-kfoldCV = 2
+kfoldCV = 5
 include_omics = ['Exp']
 max_drug_len=50 # 不夠補零補到50 / 超過取前50個subwords(index) !!!!須改方法!!!!
 drug_embedding_feature_size = 128
-ESPF = False # False True
-Drug_SelfAttention = False 
+ESPF = True # False True
+Drug_SelfAttention = True
+pos_emb_type = 'sinusoidal' # 'learned' 'sinusoidal'
 #需再修改-----------
 
 intermediate_size =512
-num_attention_heads = 8
+num_attention_heads = 8        
 attention_probs_dropout_prob = 0.1
 hidden_dropout_prob = 0.1
 
@@ -49,11 +50,12 @@ elif ESPF is False:
     drug_encode_dims =[110,55,22]
     dense_layer_dim = sum(omics_encode_dim_dict[omic_type][2] for omic_type in include_omics) + drug_encode_dims[2] # MLPDim
 #需再修改-------------
-    
+TrackGradient = False # False True
+
 activation_func = nn.ReLU()  # ReLU activation function # Leaky ReLu
 activation_func_final = ScaledSigmoid(scale=8) # GroundT range ( 0 ~ scale )
 #nn.Sigmoid()or ReLU() or Linear/identity(when -log2AUC)
-batch_size = 100
+batch_size = 200
 num_epoch = 200 # for k fold CV 
 patience = 20
 warmup_iters = 60
@@ -68,7 +70,7 @@ criterion = Custom_Weighted_LossFunction(loss_type="weighted_MSE", loss_lambda=1
         regular_type (str): The type of regularization to use ("L1", "L2", "L1+L2"), or None for no regularization.
         regular_lambda (float): The lambda weight for regularization. Default is 1e-05."""
 
-hyperparameter_print = f' omics_dict ={omics_dict}\n omics_files ={omics_files}\n TCGA_pretrain_weight_path_dict ={TCGA_pretrain_weight_path_dict}\n seed ={seed}\n  model_name ={model_name}\n AUCtransform ={AUCtransform}\n splitType ={splitType}\n kfoldCV ={kfoldCV}\n omics_encode_dim ={[(omic_type,omics_encode_dim_dict[omic_type]) for omic_type in include_omics]}\n max_drug_len ={max_drug_len}\n drug_embedding_feature_size ={drug_embedding_feature_size}\n ESPF ={ESPF}\n Drug_SelfAttention ={Drug_SelfAttention}\n intermediate_size ={intermediate_size}\n num_attention_heads ={num_attention_heads}\n attention_probs_dropout_prob ={attention_probs_dropout_prob}\n hidden_dropout_prob ={hidden_dropout_prob}\n drug_encode_dims ={drug_encode_dims}\n dense_layer_dim = {dense_layer_dim}\n activation_func = {activation_func}\n activation_func_final = {activation_func_final}\n batch_size = {batch_size}\n num_epoch = {num_epoch}\n patience = {patience}\n warmup_iters = {warmup_iters}\n Decrease_percent = {Decrease_percent}\n continuous ={continuous}\n learning_rate = {learning_rate}\n criterion ={criterion}\n'
+hyperparameter_print = f' omics_dict ={omics_dict}\n omics_files ={omics_files}\n TCGA_pretrain_weight_path_dict ={TCGA_pretrain_weight_path_dict}\n seed ={seed}\n  model_name ={model_name}\n AUCtransform ={AUCtransform}\n splitType ={splitType}\n kfoldCV ={kfoldCV}\n omics_encode_dim ={[(omic_type,omics_encode_dim_dict[omic_type]) for omic_type in include_omics]}\n max_drug_len ={max_drug_len}\n drug_embedding_feature_size ={drug_embedding_feature_size}\n ESPF ={ESPF}\n Drug_SelfAttention ={Drug_SelfAttention}\n pos_emb_type ={pos_emb_type}\n intermediate_size ={intermediate_size}\n num_attention_heads ={num_attention_heads}\n attention_probs_dropout_prob ={attention_probs_dropout_prob}\n hidden_dropout_prob ={hidden_dropout_prob}\n drug_encode_dims ={drug_encode_dims}\n dense_layer_dim = {dense_layer_dim}\n activation_func = {activation_func}\n activation_func_final = {activation_func_final}\n batch_size = {batch_size}\n num_epoch = {num_epoch}\n patience = {patience}\n warmup_iters = {warmup_iters}\n Decrease_percent = {Decrease_percent}\n continuous ={continuous}\n learning_rate = {learning_rate}\n criterion ={criterion}\n'
 
 __translation_table__ = str.maketrans({
     "*": "",    "/": "",    ":": "-",    "%": "",

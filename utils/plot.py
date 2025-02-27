@@ -47,16 +47,14 @@ def loss_curve(model_name, train_epoch_loss_list, val_epoch_loss_list, best_epoc
     plt.legend()  # Add legend to differentiate between training and validation losses
     plt.grid(True)
     # Set y-axis limit
-    top = max(max(train_epoch_loss_list), max(val_epoch_loss_list))
-    bottom = min(min(train_epoch_loss_list), min(val_epoch_loss_list))
-    print("top",top)
-    print("bottom",bottom)
-    if top>1 and bottom<=1:
-        plt.ylim(top=1)
-        plt.ylim(bottom=0)
+    train_max = max(train_epoch_loss_list)
+    val_max = max(val_epoch_loss_list)
+    train_min = min(train_epoch_loss_list)
+    val_min = min(val_epoch_loss_list)
+    if (train_min <= 1.5 < train_max) and (val_min <= 1.5 < val_max):
+        plt.ylim(top=1.5, bottom=0)
     else:
-        plt.ylim(top=None)
-        plt.ylim(bottom=None)
+        plt.ylim(top=None, bottom=None)
     fig.savefig(os.path.join(hyperparameter_folder_path, 'training_validation_loss_curve.png'))
     return plt
     

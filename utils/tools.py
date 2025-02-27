@@ -86,6 +86,20 @@ def get_vram_usage():
     print("VRAM Usage Percentage:", vram_percent, "%")
     return None
 
+import psutil
+# if the CPU memory usage exceeds a certain threshold, stop the program
+def check_memory(threshold_GB=14):
+    mem = psutil.virtual_memory()
+    used_GB = mem.used / (1024 ** 3)
+    if used_GB >= threshold_GB:
+        print(f"Memory exceeded {threshold_GB}GB. Stopping.")
+        exit(1)
+# Usage:
+'''
+for epoch in range(epochs):
+    check_memory()  # Call every few batches for efficiency'''
+
+
 
 # monitor gradients and weights to prevent gradients explode and vanish causing unstable training
 '''

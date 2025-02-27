@@ -9,7 +9,7 @@ import os
 import time 
 
 class GradientNormTracker:
-    def __init__(self, batch_size,check_frequency=1, enable_plot=True):
+    def __init__(self, batch_size,check_frequency=10, enable_plot=True):
         """
         Initializes the gradient norm tracker.
         Args:
@@ -56,7 +56,7 @@ class GradientNormTracker:
         return self.gradient_fig
 
     
-    
+# Usage 
 # Grad_tracker = GradientNormTracker(check_frequency=1, enable_plot=True)  # Enable or disable plotting
 # for epoch in range
 #    loss.backward()
@@ -139,7 +139,7 @@ def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,D
 
 
 
-def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrease_percent, continuous, learning_rate, criterion, train_loader, val_loader, device,ESPF,Drug_SelfAttention,seed, kfoldCV,weighted_threshold, few_weight, more_weight):
+def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrease_percent, continuous, learning_rate, criterion, train_loader, val_loader, device,ESPF,Drug_SelfAttention,seed, kfoldCV,weighted_threshold, few_weight, more_weight, TrackGradient=False):
     # Training with early stopping (assuming you've defined the EarlyStopping logic)
     if warmup_iters is not None:
         lr_scheduler = warmup_lr_scheduler(optimizer, warmup_iters, Decrease_percent,continuous)
@@ -149,7 +149,8 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
     counter = 0
     train_epoch_loss_list = []#  for train every epoch loss plot
     val_epoch_loss_list=[]#  for validation every epoch loss plot
-    Grad_tracker = GradientNormTracker(batch_size,check_frequency=1, enable_plot=True)  # Enable or disable plotting
+    if TrackGradient is True:
+        Grad_tracker = GradientNormTracker(batch_size,check_frequency=10, enable_plot=True)  # Enable or disable plotting
 
     torch.manual_seed(seed)
     model.train()
@@ -181,7 +182,10 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
                 loss = criterion(outputs.reshape(-1), target.to(torch.float32).reshape(-1), model, weights)
                 # assert loss.requires_grad == True  # Ensure gradients are being computed
                 loss.backward()  # Compute gradients
-                gradient_norms_list = Grad_tracker.check_and_log(model)  # Check and log gradient norms
+                if TrackGradient is True:
+                    gradient_norms_list = Grad_tracker.check_and_log(model)  # Check and log gradient norms
+                else:
+                    gradient_norms_list = None
                 optimizer.step()  # Update weights
                 total_train_loss += (loss.cpu().detach().numpy()) #/ (valueMultiply**2 if isinstance(criterion, nn.MSELoss) else (valueMultiply if isinstance(criterion, nn.L1Loss) else 1))
                 
@@ -204,13 +208,15 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
             best_epoch = epoch+1 # bestepoch
             counter = 0
             best_val_epoch_train_loss = mean_batch_train_loss
-            best_epoch_attention_score_matrix = attention_score_matrix
+            best_epoch_attention_score_matrix = attention_score_matrix # torch.Size([bsz, 8, 50, 50])(without dropout)
         else:
             counter += 1
             if counter >= patience:
                 print(f'Early stopping after {patience} epochs of no improvement.')
                 break
-        
-    gradient_fig = Grad_tracker.plot_gradient_norms()
+    if TrackGradient is True:    
+        gradient_fig = Grad_tracker.plot_gradient_norms()
+    else:
+        gradient_fig = None
     
     return best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list, best_val_epoch_train_loss,best_epoch_attention_score_matrix, gradient_fig, gradient_norms_list

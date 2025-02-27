@@ -91,27 +91,40 @@ class Mut_Drug_Model(nn.Module):
 
 
 # Modules------------------------------------------------------------------------------------------------------------------------------------------------------        
-'''
-class PositionalEncoding(nn.Module):
-  def __init__(self, d_model, dropout=.1, max_len=1024):
-    super(PositionalEncoding, self).__init__()
-    self.dropout = nn.Dropout(p=dropout)
-    positional_encoding = torch.zeros(max_len, d_model) # [max_len, d_model]
-    position = torch.arange(0, max_len).float().unsqueeze(1) # [max_len, 1]
-    div_term = torch.exp(torch.arange(0, d_model, 2).float() *
-                         (-torch.log(torch.Tensor([10000])) / d_model)) # [max_len / 2]
-    positional_encoding[:, 0::2] = torch.sin(position * div_term) # even
-    positional_encoding[:, 1::2] = torch.cos(position * div_term) # odd
-    # [max_len, d_model] -> [1, max_len, d_model] -> [max_len, 1, d_model]
-    positional_encoding = positional_encoding.unsqueeze(0).transpose(0, 1)
-    # register pe to buffer and require no grads
-    self.register_buffer('pe', positional_encoding)
+
+class SinusoidalPositionalEncoding(nn.Module):
+  def __init__(self, hidden_size, max_len=50):
+    super(SinusoidalPositionalEncoding, self).__init__()
+    pe = torch.zeros(max_len, hidden_size) # torch.Size([50, 128])
+    position = torch.arange(0, max_len).float().unsqueeze(1) # torch.Size([50, 1]) # 0~50
+    div_term = torch.exp(torch.arange(0, hidden_size, 2).float() *
+                         (-torch.log(torch.Tensor([10000])) / hidden_size)) # [max_len / 2]
+                        #生成一個數位 [0， 2， 4， ...， hidden_size-2] 的張量（偶數索引）。
+    pe[:, 0::2] = torch.sin(position * div_term) #將 sine 函數應用於位置編碼張量 （pe） 的偶數維數。
+    pe[:, 1::2] = torch.cos(position * div_term) #將餘弦函數應用於位置編碼張量 （pe） 的奇數維數。
+    pe = pe.unsqueeze(0) # torch.Size([1, 50, 128])
+    # register pe to buffer and require no grads#緩衝區的參數在訓練期間不會更新
+    self.register_buffer('pe', pe)
   def forward(self, x):
-    # x: [seq_len, batch, d_model]
+    # x: [batch, seq_len, hidden_size]
     # we can add positional encoding to x directly, and ignore other dimension
-    x = x + self.pe[:x.size(0), ...]
-    return self.dropout(x)
-'''
+    return x + self.pe[:,:x.size(1)].to(x.device)# x.size(1)= 50
+  
+class LearnedPositionalEncoding(nn.Module):
+    def __init__(self, hidden_size, max_len):#(128, 50)
+        super().__init__()
+        self.position_embeddings = nn.Embedding(max_len, hidden_size)#(128, 50) # 50個pos id(0~50)用128維vector來表示位置資訊
+
+    def forward(self, x):# x: torch.Size([bsz, 50]) # 50個子結構id
+            # seq_length = seq.size(1) #seq:(batchsize=64,50)# seq_length:50 # 50個onehot categorical id 𝜖(0~2585)
+            # position_ids = torch.arange(seq_length, dtype=torch.long, device=seq.device) #position_ids:torch.Size([50]) (0~50)
+            # position_ids = position_ids.unsqueeze(0).expand_as(seq)#position_ids:torch.Size([bsz, 50])
+        seq_length = x.size(1) #x:(batchsize=64,50)# 50個onehot categorical id 𝜖(0~2585)
+        position_ids = torch.arange(seq_length, dtype=torch.long, device=x.device) #position_ids:torch.Size([50]) (0~50)
+        position_ids = position_ids.unsqueeze(0).expand_as(x) #position_ids =>torch.Size([bsz, 50])
+        return self.position_embeddings(position_ids)# generate torch.Size([bsz, 50, 128])位置特徵，每一個位置都用128為來描述
+    
+
 class LayerNorm(nn.Module):
     def __init__(self, hidden_size, variance_epsilon=1e-12):
         super(LayerNorm, self).__init__()
@@ -126,22 +139,30 @@ class LayerNorm(nn.Module):
 
 class Embeddings(nn.Module): # word embedding + positional encoding
     """Construct the embeddings from protein/target, position embeddings."""
-    def __init__(self, hidden_size,max_drug_len,hidden_dropout_prob,substructure_size):
+    def __init__(self, hidden_size,max_drug_len,hidden_dropout_prob, pos_emb_type ,substructure_size):
         super(Embeddings, self).__init__()
         self.word_embeddings = nn.Embedding(substructure_size, hidden_size)#(2586,128)# 50個onehot categorical id(0~2585)用128維來表示類別資訊
-        self.position_embeddings = nn.Embedding(max_drug_len, hidden_size)#(50, 128)# 50個pos id(0~50)用128維vector來表示位置資訊
+        self.pos_emb_type = pos_emb_type
+        if pos_emb_type == "learned":#Learned Positional Embedding
+            self.position_embeddings = LearnedPositionalEncoding(hidden_size, max_len=max_drug_len)#(128,50)
+                #self.position_embeddings = nn.Embedding(max_drug_len, hidden_size)#(50, 128)# 50個pos id(0~50)用128維vector來表示位置資訊
+        elif pos_emb_type == "sinusoidal":#Sinusoidal Position Encoding
+            self.position_embeddings = SinusoidalPositionalEncoding(hidden_size, max_len=max_drug_len)#(128,50)
+            
         self.LayerNorm = LayerNorm(hidden_size)#128
         self.dropout = nn.Dropout(hidden_dropout_prob)#0.1
-    def forward(self, input_ids):
-        seq_length = input_ids.size(1) #input_ids:(batchsize=64,50)# seq_length:50 # 50個onehot categorical id(0~2585)
-        position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device) #position_ids:torch.Size([50]) (0~50)
-        position_ids = position_ids.unsqueeze(0).expand_as(input_ids)#position_ids:torch.Size([64, 50])
-        words_embeddings = self.word_embeddings(input_ids) #input_ids:(batchsize=64,50)# generate(50,128)類別特徵
-        position_embeddings = self.position_embeddings(position_ids)# generate(50,128)位置特徵
-        # words_embeddings: torch.Size([bsz, 50, 128])50個sub,其對應的representation 
-        # position_embeddings: torch.Size([bsz, 50, 128])
-
-        embeddings = words_embeddings + position_embeddings # embeddings:torch.Size([bsz, 50, 128])
+    def forward(self, seq):# torch.Size([bsz, 50]) # 50個子結構id 
+        words_embeddings = self.word_embeddings(seq) #seq:(batchsize=64,50)# generate(bze,50,128)類別特徵
+        # words_embeddings: torch.Size([bsz, 50, 128])50個sub,其對應的representation
+    #Learned Positional Embedding
+        if self.pos_emb_type == "learned":
+            position_embeddings = self.position_embeddings(seq)# generate torch.Size([bsz, 50, 128])位置特徵
+            #position_embeddings: torch.Size([bsz, 50, 128])
+            embeddings = words_embeddings + position_embeddings # embeddings:torch.Size([bsz, 50, 128])
+    #Sinusoidal Position Encoding
+        elif self.pos_emb_type == "sinusoidal":
+            embeddings = self.position_embeddings(words_embeddings)  # Shape: [bsz, 50, 128] 
+         
         embeddings = self.LayerNorm(embeddings)#LayerNorm embeddings torch.Size([bsz, 50, 128])
         embeddings = self.dropout(embeddings)#dropout embeddings torch.Size([bsz, 50, 128])
         return embeddings # emb.shape:torch.Size([bsz, 50, 128])
@@ -352,7 +373,7 @@ class Type_Encoding(nn.Module):
 # Models------------------------------------------------------------------------------------------------------------------------------------------------------
 class Omics_DrugESPF_Model(nn.Module):
     def __init__(self,omics_encode_dim_dict,drug_encode_dims, activation_func,activation_func_final,dense_layer_dim, device, ESPF, Drug_SelfAttention,
-                 hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeaetures_dict, max_drug_len, TCGA_pretrain_weight_path_dict=None):
+                 pos_emb_type, hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeaetures_dict, max_drug_len, TCGA_pretrain_weight_path_dict=None):
         super(Omics_DrugESPF_Model, self).__init__()
 
         def load_TCGA_pretrain_weight(model, pretrained_weights_path, device):
@@ -385,13 +406,13 @@ class Omics_DrugESPF_Model(nn.Module):
 
 # Define subnetwork for drug ESPF features
         if ESPF is True:
-            self.emb_f = Embeddings(hidden_size,max_drug_len,hidden_dropout_prob,substructure_size = 2586)#(128,50,0.1,2586)
+            self.emb_f = Embeddings(hidden_size,max_drug_len,hidden_dropout_prob, pos_emb_type, substructure_size = 2586)#(128,50,0.1,2586)
             # if attention is not True 
             if Drug_SelfAttention is False: 
                 self.dropout = nn.Dropout(attention_probs_dropout_prob)
             # self.output = SelfOutput(hidden_size, hidden_dropout_prob) # (128,0.1) # apply linear and skip conneaction and LayerNorm and dropout after attention
             # if attention is True  
-            elif Drug_SelfAttention is False: 
+            elif Drug_SelfAttention is True: 
                 self.TransformerEncoder = Encoder(hidden_size, intermediate_size, num_attention_heads,attention_probs_dropout_prob, hidden_dropout_prob)#(128,512,8,0.1,0.1)
         
             self.MLP4ESPF = nn.Sequential(
@@ -423,7 +444,7 @@ class Omics_DrugESPF_Model(nn.Module):
             nn.Linear(dense_layer_dim, dense_layer_dim),
             activation_func,
             nn.Dropout(p=0),
-            nn.Linear(dense_layer_dim, dense_layer_dim),
+            nn.Linear(dense_layer_dim, dense_layer_dim), 
             activation_func,
             nn.Dropout(p=0),
             nn.Linear(dense_layer_dim, 1),
@@ -433,7 +454,7 @@ class Omics_DrugESPF_Model(nn.Module):
 
         self.print_flag = True
         self.attention_probs = None # store Attention score matrix
-    
+       
     def _init_weights(self, model):
         for layer in model:
             if isinstance(layer, nn.Linear):
@@ -463,7 +484,7 @@ class Omics_DrugESPF_Model(nn.Module):
                 mask_weight = (1.0 - mask_weight) * -10000.0
                 mask_weight = nn.Softmax(dim=-1)(mask_weight)
                 mask_weight = self.dropout(mask_weight)
-                drug_emb_masked = torch.matmul(mask_weight, drug_embed) # emb_masked: torch.Size([bsz, 50, 128])
+                drug_emb_masked = torch.matmul(mask_weight, drug_embed) # emb_masked: torch.Size([bsz, 50, 128]) # matmul矩陣相乘
                 # 沒做: class SelfOutput(nn.Module): # apply linear and skip conneaction and LayerNorm and dropout after 
 
             elif Drug_SelfAttention is True:
@@ -474,7 +495,7 @@ class Omics_DrugESPF_Model(nn.Module):
                 mask = (1.0 - mask) * -10000.0
                 drug_emb_masked, attention_probs_0  = self.TransformerEncoder(drug_embed, mask)# hidden_states:drug_embed.shape:torch.Size([bsz, 50, 128]); mask: ex_e_mask:torch.Size([bsz, 1, 1, 50])
                 # drug_emb_masked: torch.Size([bsz, 50, 128]) 
-                # attention_probs_0 = nn.Softmax(dim=-1)(attention_scores) # attention_probs_0:torch.Size([bsz, 8, 50, 50])(without dropout)
+                # attention_probs_0 = nn.Softmax(dim=-1)(attention_scores) torch.Size([bsz, 8, 50, 50])(without dropout)
                 self.attention_probs = attention_probs_0
             elif Drug_SelfAttention is None:
                     print("\n Drug_SelfAttention is assign to None , please assign to False or True \n")
