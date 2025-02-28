@@ -372,9 +372,25 @@ class Type_Encoding(nn.Module):
 
 # Models------------------------------------------------------------------------------------------------------------------------------------------------------
 class Omics_DrugESPF_Model(nn.Module):
-    def __init__(self,omics_encode_dim_dict,drug_encode_dims, activation_func,activation_func_final,dense_layer_dim, device, ESPF, Drug_SelfAttention,
-                 pos_emb_type, hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeaetures_dict, max_drug_len, TCGA_pretrain_weight_path_dict=None):
+    def __init__(self, device, omics_numfeatures_dict, **kwargs):
         super(Omics_DrugESPF_Model, self).__init__()
+        
+        omics_encode_dim_dict = kwargs['omics_encode_dim_dict']
+        drug_encode_dims = kwargs['drug_encode_dims']
+        activation_func = kwargs['activation_func']
+        activation_func_final = kwargs['activation_func_final']
+        dense_layer_dim = kwargs['dense_layer_dim']
+        ESPF = kwargs['ESPF']
+        Drug_SelfAttention = kwargs['Drug_SelfAttention']
+        pos_emb_type = kwargs['pos_emb_type']
+        hidden_size = kwargs['drug_embedding_feature_size']
+        intermediate_size = kwargs['intermediate_size']
+        num_attention_heads = kwargs['num_attention_heads']
+        attention_probs_dropout_prob = kwargs['attention_probs_dropout_prob']
+        hidden_dropout_prob = kwargs['hidden_dropout_prob']
+        max_drug_len = kwargs['max_drug_len']
+        
+        TCGA_pretrain_weight_path_dict = kwargs.get('TCGA_pretrain_weight_path_dict', None)
 
         def load_TCGA_pretrain_weight(model, pretrained_weights_path, device):
             state_dict = torch.load(pretrained_weights_path, map_location=device)  # Load the state_dict
@@ -390,9 +406,9 @@ class Omics_DrugESPF_Model(nn.Module):
 
 # Create subnetworks for each omic type dynamically
         self.MLP4omics_dict = nn.ModuleDict()
-        for omic_type in omics_numfeaetures_dict.keys():
+        for omic_type in omics_numfeatures_dict.keys():
             self.MLP4omics_dict[omic_type] = nn.Sequential(
-                nn.Linear(omics_numfeaetures_dict[omic_type], omics_encode_dim_dict[omic_type][0]),
+                nn.Linear(omics_numfeatures_dict[omic_type], omics_encode_dim_dict[omic_type][0]),
                 activation_func,
                 nn.Linear(omics_encode_dim_dict[omic_type][0], omics_encode_dim_dict[omic_type][1]),
                 activation_func_final,
@@ -453,7 +469,7 @@ class Omics_DrugESPF_Model(nn.Module):
         self._init_weights(self.model_final_add)
 
         self.print_flag = True
-        self.attention_probs = None # store Attention score matrix
+        # self.attention_probs = None # store Attention score matrix
        
     def _init_weights(self, model):
         for layer in model:
@@ -461,8 +477,8 @@ class Omics_DrugESPF_Model(nn.Module):
                 init.kaiming_uniform_(layer.weight, a=0, mode='fan_in', nonlinearity='relu')
                 if layer.bias is not None:
                     init.zeros_(layer.bias)
-    def forward(self, omics_tensor_dict,drug, device,ESPF,Drug_SelfAttention):
-
+    def forward(self, omics_tensor_dict,drug, device,**kwargs):
+        ESPF,Drug_SelfAttention = kwargs['ESPF'],kwargs['Drug_SelfAttention']
         omic_embeddings = []
         # Loop through each omic type and pass through its respective model
         for omic_type, omic_tensor in omics_tensor_dict.items():
@@ -493,10 +509,10 @@ class Omics_DrugESPF_Model(nn.Module):
                     self.print_flag  = False
                 mask = mask.unsqueeze(1).unsqueeze(2) # mask.shape: torch.Size([bsz, 1, 1, 50])
                 mask = (1.0 - mask) * -10000.0
-                drug_emb_masked, attention_probs_0  = self.TransformerEncoder(drug_embed, mask)# hidden_states:drug_embed.shape:torch.Size([bsz, 50, 128]); mask: ex_e_mask:torch.Size([bsz, 1, 1, 50])
+                drug_emb_masked, AttenScorMat_DrugSelf  = self.TransformerEncoder(drug_embed, mask)# hidden_states:drug_embed.shape:torch.Size([bsz, 50, 128]); mask: ex_e_mask:torch.Size([bsz, 1, 1, 50])
                 # drug_emb_masked: torch.Size([bsz, 50, 128]) 
                 # attention_probs_0 = nn.Softmax(dim=-1)(attention_scores) torch.Size([bsz, 8, 50, 50])(without dropout)
-                self.attention_probs = attention_probs_0
+                
             elif Drug_SelfAttention is None:
                     print("\n Drug_SelfAttention is assign to None , please assign to False or True \n")
 
@@ -514,4 +530,5 @@ class Omics_DrugESPF_Model(nn.Module):
         # Concatenate embeddings from all subnetworks
         combined_mut_drug_embed = torch.cat([omic_embeddings, drug_final_emb], dim=1)#dim=1: turn into 1D
         output = self.model_final_add(combined_mut_drug_embed)
-        return output, self.attention_probs
+        return {"outputs":output, 
+                "AttenScorMat_DrugSelf":AttenScorMat_DrugSelf}

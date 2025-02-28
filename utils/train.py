@@ -82,7 +82,11 @@ def log_gradient_norms(model):
     print(f"Total Gradient Norm: {total_norm:.4f}")
     return total_norm
 
-def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='' ):
+def evaluation(model, val_epoch_loss_list, eval_loader, device, weighted_threshold, few_weight, more_weight, correlation='', **kwargs ):
+    ESPF = kwargs['ESPF']
+    Drug_SelfAttention = kwargs['Drug_SelfAttention']
+    criterion = kwargs['criterion']
+
     torch.manual_seed(42)
     eval_outputs = [] # for correlation
     eval_targets = [] # for correlation
@@ -93,8 +97,8 @@ def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,D
     with torch.no_grad():
         for batch_idx,inputs in enumerate(eval_loader):
             omics_tensor_dict,drug, target = inputs[0],inputs[1], inputs[-1].to(device=device)
-            outputs,_ = model(omics_tensor_dict, drug, device,ESPF,Drug_SelfAttention) #drug.to(torch.float32)
-            
+            model_output_dict = model(omics_tensor_dict, drug, device,**{"ESPF":ESPF,"Drug_SelfAttention":Drug_SelfAttention}) #drug.to(torch.float32)
+            outputs = model_output_dict['outputs']
             mask = ~torch.isnan(target)# Create a mask for non-NaN values in tensor # 去除nan的項
             target = target[mask]# Apply the mask to filter out NaN values from both tensors
             predictedAUCwithoutGT = outputs # for unknown GroundTruth
@@ -139,8 +143,18 @@ def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,D
 
 
 
-def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrease_percent, continuous, learning_rate, criterion, train_loader, val_loader, device,ESPF,Drug_SelfAttention,seed, kfoldCV,weighted_threshold, few_weight, more_weight, TrackGradient=False):
-    # Training with early stopping (assuming you've defined the EarlyStopping logic)
+def train(model, optimizer, train_loader, val_loader, device,weighted_threshold, few_weight, more_weight, **kwargs):
+    batch_size=kwargs['batch_size']
+    num_epoch=kwargs['num_epoch']
+    patience=kwargs['patience']
+    warmup_iters=kwargs['warmup_iters']
+    Decrease_percent=kwargs['Decrease_percent']
+    criterion=kwargs['criterion']
+    continuous=kwargs['continuous']
+    ESPF,Drug_SelfAttention = kwargs['ESPF'],kwargs['Drug_SelfAttention']
+    seed = kwargs['seed']
+    TrackGradient=kwargs['TrackGradient']
+    # Training with early stopping 
     if warmup_iters is not None:
         lr_scheduler = warmup_lr_scheduler(optimizer, warmup_iters, Decrease_percent,continuous)
     best_val_loss = float('inf')
@@ -163,7 +177,10 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
             omics_tensor_dict,drug = inputs[0],inputs[1]
             target = inputs[2].to(device=device)
             
-            outputs,attention_score_matrix = model(omics_tensor_dict, drug, device,ESPF,Drug_SelfAttention) #drug.to(torch.float32)
+            model_output_dict = model(omics_tensor_dict, drug, device,**{"ESPF":ESPF,"Drug_SelfAttention":Drug_SelfAttention}) #drug.to(torch.float32)
+            outputs = model_output_dict['outputs']
+            AttenScorMat_DrugSelf = model_output_dict.get('AttenScorMat_DrugSelf', None)
+            AttenScorMat_DrugCellSelf = model_output_dict.get('AttenScorMat_DrugCellSelf', None)
             # attention_score_matrix torch.Size([bsz, 8, 50, 50])# softmax(without dropout)
             mask = ~torch.isnan(target,)# Create a mask for non-NaN values in tensor # 0:nan, 1:non-nan
 
@@ -196,7 +213,7 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
         train_epoch_loss_list.append(mean_batch_train_loss) # mean_batch_train_loss = epoch_train_loss
         # print(f'Epoch [{epoch + 1}/{num_epoch}] - mean_batch Training Loss: {mean_batch_train_loss:.8f}')  
         
-        mean_batch_val_loss, val_epoch_loss_list = evaluation(model, val_epoch_loss_list, criterion, val_loader, device,ESPF,Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='plotLossCurve') # input arg kfoldCV must be None (1)
+        mean_batch_val_loss, val_epoch_loss_list = evaluation(model, val_epoch_loss_list, val_loader, device, weighted_threshold, few_weight, more_weight, correlation='plotLossCurve', **kwargs)
                                                
         if warmup_iters is not None:
             # print("lr of epoch", epoch + 1, "=>", lr_scheduler.get_lr()) 
@@ -208,7 +225,8 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
             best_epoch = epoch+1 # bestepoch
             counter = 0
             best_val_epoch_train_loss = mean_batch_train_loss
-            best_epoch_attention_score_matrix = attention_score_matrix # torch.Size([bsz, 8, 50, 50])(without dropout)
+            best_epoch_AttenScorMat_DrugSelf = AttenScorMat_DrugSelf # torch.Size([bsz, 8, 50, 50])(without dropout)
+            best_epoch_AttenScorMat_DrugCellSelf = AttenScorMat_DrugCellSelf
         else:
             counter += 1
             if counter >= patience:
@@ -219,4 +237,15 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
     else:
         gradient_fig = None
     
-    return best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list, best_val_epoch_train_loss,best_epoch_attention_score_matrix, gradient_fig, gradient_norms_list
+
+    return {"best_epoch":best_epoch, 
+            "best_weight":best_weight, 
+            "best_val_loss":best_val_loss, 
+            "train_epoch_loss_list":train_epoch_loss_list, 
+            "val_epoch_loss_list":val_epoch_loss_list, 
+            "best_val_epoch_train_loss":best_val_epoch_train_loss,
+            "best_epoch_AttenScorMat_DrugSelf":best_epoch_AttenScorMat_DrugSelf, 
+            "best_epoch_AttenScorMat_DrugCellSelf":best_epoch_AttenScorMat_DrugCellSelf ,  
+            "gradient_fig":gradient_fig, 
+            "gradient_norms_list":gradient_norms_list
+            }

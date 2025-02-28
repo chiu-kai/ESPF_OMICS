@@ -4,7 +4,7 @@ import torch.nn as nn
 from utils.Loss import Custom_LossFunction,Custom_Weighted_LossFunction
 from utils.Custom_Activation_Function import ScaledSigmoid
 
-test = False #False, True: batch_size = 3, num_epoch = 2, full dataset
+test = True #False, True: batch_size = 3, num_epoch = 2, full dataset
 
 omics_files = {
     'Mut': "../data/CCLE/CCLE_match_TCGAgene_PRISMandEXPsample_binary_mutation_476_6009.txt",
@@ -33,7 +33,7 @@ max_drug_len=50 # 不夠補零補到50 / 超過取前50個subwords(index) !!!!�
 drug_embedding_feature_size = 128
 ESPF = True # False True
 Drug_SelfAttention = True
-pos_emb_type = 'sinusoidal' # 'learned' 'sinusoidal'
+pos_emb_type = 'learned' # 'learned' 'sinusoidal'
 #需再修改-----------
 
 intermediate_size =512
@@ -80,9 +80,42 @@ __translation_table__ = str.maketrans({
 hyperparameter_folder_part = (f'Model{model_name}_{splitType}_Omics{[omic_type for omic_type in include_omics]}_ESPF{ESPF}_Tranformer{Drug_SelfAttention}').translate(__translation_table__)
 
 
-
-
-
+# Packing all variables into a dictionary named "config"
+kwargs = {
+    "test": test,  # False, True: batch_size = 3, num_epoch = 2, full dataset
+    "omics_files": omics_files,
+    "omics_dict": omics_dict,
+    "omics_encode_dim_dict": omics_encode_dim_dict,
+    "TCGA_pretrain_weight_path_dict": TCGA_pretrain_weight_path_dict,
+    "seed": seed,
+    "model_name": model_name,
+    "AUCtransform": AUCtransform,
+    "splitType": splitType,
+    "kfoldCV": kfoldCV,
+    "include_omics": include_omics,
+    "max_drug_len": max_drug_len,
+    "drug_embedding_feature_size": drug_embedding_feature_size,
+    "ESPF": ESPF,
+    "Drug_SelfAttention": Drug_SelfAttention,
+    "pos_emb_type": pos_emb_type,
+    "intermediate_size": intermediate_size,
+    "num_attention_heads": num_attention_heads,
+    "attention_probs_dropout_prob": attention_probs_dropout_prob,
+    "hidden_dropout_prob": hidden_dropout_prob,
+    "drug_encode_dims": drug_encode_dims,
+    "dense_layer_dim": dense_layer_dim,
+    "TrackGradient": TrackGradient,
+    "activation_func": activation_func,
+    "activation_func_final": activation_func_final,
+    "batch_size": batch_size,
+    "num_epoch": num_epoch,
+    "patience": patience,
+    "warmup_iters": warmup_iters,
+    "Decrease_percent": Decrease_percent,
+    "continuous": continuous,
+    "learning_rate": learning_rate,
+    "criterion": criterion,
+}
 
 
 
