@@ -4,7 +4,7 @@ import torch.nn as nn
 from utils.Loss import Custom_LossFunction,Custom_Weighted_LossFunction
 from utils.Custom_Activation_Function import ScaledSigmoid
 
-test = True #False, True: batch_size = 3, num_epoch = 2, full dataset
+test = False #False, True: batch_size = 3, num_epoch = 2, full dataset
 
 omics_files = {
     'Mut': "../data/CCLE/CCLE_match_TCGAgene_PRISMandEXPsample_binary_mutation_476_6009.txt",
@@ -27,12 +27,12 @@ seed = 42
 model_name = "Omics_DrugESPF_Model"
 AUCtransform = "-log2" #"-log2"
 splitType= 'byDrug' # byCCL byDrug
-kfoldCV = 2
+kfoldCV = 5
 include_omics = ['Exp']
 max_drug_len=50 # 不夠補零補到50 / 超過取前50個subwords(index) !!!!須改方法!!!!
 drug_embedding_feature_size = 128
-ESPF = False # False True
-Drug_SelfAttention = False 
+ESPF = True # False True
+Drug_SelfAttention = True 
 #需再修改-----------
 
 intermediate_size =512
@@ -53,7 +53,7 @@ elif ESPF is False:
 activation_func = nn.ReLU()  # ReLU activation function # Leaky ReLu
 activation_func_final = ScaledSigmoid(scale=8) # GroundT range ( 0 ~ scale )
 #nn.Sigmoid()or ReLU() or Linear/identity(when -log2AUC)
-batch_size = 100
+batch_size = 200
 num_epoch = 200 # for k fold CV 
 patience = 20
 warmup_iters = 60
@@ -76,13 +76,5 @@ __translation_table__ = str.maketrans({
     ",": "" })
 
 hyperparameter_folder_part = (f'Model{model_name}_{splitType}_Omics{[omic_type for omic_type in include_omics]}_ESPF{ESPF}_Tranformer{Drug_SelfAttention}').translate(__translation_table__)
-
-
-
-
-
-
-
-
 
 

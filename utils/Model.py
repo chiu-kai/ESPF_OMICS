@@ -91,27 +91,7 @@ class Mut_Drug_Model(nn.Module):
 
 
 # Modules------------------------------------------------------------------------------------------------------------------------------------------------------        
-'''
-class PositionalEncoding(nn.Module):
-  def __init__(self, d_model, dropout=.1, max_len=1024):
-    super(PositionalEncoding, self).__init__()
-    self.dropout = nn.Dropout(p=dropout)
-    positional_encoding = torch.zeros(max_len, d_model) # [max_len, d_model]
-    position = torch.arange(0, max_len).float().unsqueeze(1) # [max_len, 1]
-    div_term = torch.exp(torch.arange(0, d_model, 2).float() *
-                         (-torch.log(torch.Tensor([10000])) / d_model)) # [max_len / 2]
-    positional_encoding[:, 0::2] = torch.sin(position * div_term) # even
-    positional_encoding[:, 1::2] = torch.cos(position * div_term) # odd
-    # [max_len, d_model] -> [1, max_len, d_model] -> [max_len, 1, d_model]
-    positional_encoding = positional_encoding.unsqueeze(0).transpose(0, 1)
-    # register pe to buffer and require no grads
-    self.register_buffer('pe', positional_encoding)
-  def forward(self, x):
-    # x: [seq_len, batch, d_model]
-    # we can add positional encoding to x directly, and ignore other dimension
-    x = x + self.pe[:x.size(0), ...]
-    return self.dropout(x)
-'''
+
 class LayerNorm(nn.Module):
     def __init__(self, hidden_size, variance_epsilon=1e-12):
         super(LayerNorm, self).__init__()
@@ -391,7 +371,7 @@ class Omics_DrugESPF_Model(nn.Module):
                 self.dropout = nn.Dropout(attention_probs_dropout_prob)
             # self.output = SelfOutput(hidden_size, hidden_dropout_prob) # (128,0.1) # apply linear and skip conneaction and LayerNorm and dropout after attention
             # if attention is True  
-            elif Drug_SelfAttention is False: 
+            elif Drug_SelfAttention is True: 
                 self.TransformerEncoder = Encoder(hidden_size, intermediate_size, num_attention_heads,attention_probs_dropout_prob, hidden_dropout_prob)#(128,512,8,0.1,0.1)
         
             self.MLP4ESPF = nn.Sequential(

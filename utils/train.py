@@ -184,7 +184,7 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
                 gradient_norms_list = Grad_tracker.check_and_log(model)  # Check and log gradient norms
                 optimizer.step()  # Update weights
                 total_train_loss += (loss.cpu().detach().numpy()) #/ (valueMultiply**2 if isinstance(criterion, nn.MSELoss) else (valueMultiply if isinstance(criterion, nn.L1Loss) else 1))
-                
+              
         # print("outputs",outputs)
         # print("train_loss",loss) 
         # print("total_train_loss",total_train_loss,"batch_idx_without_nan_count",batch_idx_without_nan_count) 
@@ -192,7 +192,7 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
         train_epoch_loss_list.append(mean_batch_train_loss) # mean_batch_train_loss = epoch_train_loss
         # print(f'Epoch [{epoch + 1}/{num_epoch}] - mean_batch Training Loss: {mean_batch_train_loss:.8f}')  
         
-        mean_batch_val_loss, val_epoch_loss_list = evaluation(model, val_epoch_loss_list, criterion, val_loader, device,ESPF,Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='plotLossCurve') # input arg kfoldCV must be None (1)
+        mean_batch_val_loss, val_epoch_loss_list = evaluation(model, val_epoch_loss_list, criterion, val_loader, device,ESPF,Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='plotLossCurve') 
                                                
         if warmup_iters is not None:
             # print("lr of epoch", epoch + 1, "=>", lr_scheduler.get_lr()) 
@@ -210,7 +210,7 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
             if counter >= patience:
                 print(f'Early stopping after {patience} epochs of no improvement.')
                 break
-        
+         
     gradient_fig = Grad_tracker.plot_gradient_norms()
     
     return best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list, best_val_epoch_train_loss,best_epoch_attention_score_matrix, gradient_fig, gradient_norms_list
