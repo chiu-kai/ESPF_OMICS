@@ -93,8 +93,8 @@ def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,D
     with torch.no_grad():
         for batch_idx,inputs in enumerate(eval_loader):
             omics_tensor_dict,drug, target = inputs[0],inputs[1], inputs[-1].to(device=device)
-            outputs,_ = model(omics_tensor_dict, drug, device,ESPF,Drug_SelfAttention) #drug.to(torch.float32)
-            
+            model_output = model(omics_tensor_dict, drug, device, **{"ESPF":ESPF,"Drug_SelfAttention":Drug_SelfAttention}) #drug.to(torch.float32)
+            outputs = model_output[0]
             mask = ~torch.isnan(target)# Create a mask for non-NaN values in tensor # 去除nan的項
             target = target[mask]# Apply the mask to filter out NaN values from both tensors
             predictedAUCwithoutGT = outputs # for unknown GroundTruth
@@ -163,7 +163,9 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
             omics_tensor_dict,drug = inputs[0],inputs[1]
             target = inputs[2].to(device=device)
             
-            outputs,attention_score_matrix = model(omics_tensor_dict, drug, device,ESPF,Drug_SelfAttention) #drug.to(torch.float32)
+            model_output = model(omics_tensor_dict, drug, device,**{"ESPF":ESPF,"Drug_SelfAttention":Drug_SelfAttention}) #drug.to(torch.float32)
+            outputs =model_output[0]
+            
             # attention_score_matrix torch.Size([bsz, 8, 50, 50])# softmax(without dropout)
             mask = ~torch.isnan(target,)# Create a mask for non-NaN values in tensor # 0:nan, 1:non-nan
 
@@ -208,7 +210,11 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
             best_epoch = epoch+1 # bestepoch
             counter = 0
             best_val_epoch_train_loss = mean_batch_train_loss
-            best_epoch_attention_score_matrix = attention_score_matrix # torch.Size([bsz, 8, 50, 50])(without dropout)
+            best_epoch_AttenScorMat_DrugSelf = model_output[1] # torch.Size([bsz, 8, 50, 50])(without dropout)
+            if len(model_output) == 3:
+                best_epoch_AttenScorMat_DrugCellSelf = model_output[2]
+            else:
+                best_epoch_AttenScorMat_DrugCellSelf = None
         else:
             counter += 1
             if counter >= patience:
@@ -219,4 +225,4 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
     else:
         gradient_fig = None
     
-    return best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list, best_val_epoch_train_loss,best_epoch_attention_score_matrix, gradient_fig, gradient_norms_list
+    return best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list, best_val_epoch_train_loss,best_epoch_AttenScorMat_DrugSelf,best_epoch_AttenScorMat_DrugCellSelf, gradient_fig, gradient_norms_list

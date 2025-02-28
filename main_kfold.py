@@ -20,7 +20,7 @@ import os
 import importlib.util
 
 from utils.ESPF_drug2emb import drug2emb_encoder
-from utils.Model import Omics_DrugESPF_Model
+from utils.Model import Omics_DrugESPF_Model, Omics_DCSA_model
 from utils.split_data_id import split_id,repeat_func
 from utils.create_dataloader import OmicsDrugDataset
 from utils.train import train, evaluation
@@ -200,15 +200,21 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     # train
     # Init the neural network 
     set_seed(seed)
-    model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
+    if model_name == "Omics_DrugESPF_Model":
+        model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
                             TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+    elif model_name == "Omics_DCSA_model":
+        model = Omics_DCSA_model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
+                            drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
+                            TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+
     model.to(device=device)
 
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)# Initialize optimizer
 
- 
-    best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list,best_val_epoch_train_loss,best_epoch_attention_score_matrix , gradient_fig,gradient_norms_list = train( model,
+    
+    best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list,best_val_epoch_train_loss,best_epoch_AttenScorMat_DrugSelf ,best_epoch_AttenScorMat_DrugCellSelf, gradient_fig,gradient_norms_list = train( model,
         optimizer,      batch_size,      num_epoch,      patience,      warmup_iters,      Decrease_percent,    continuous,
         learning_rate,      criterion,      train_loader,      val_loader,
         device,ESPF,Drug_SelfAttention, seed, kfoldCV ,weighted_threshold, few_weight, more_weight, TrackGradient)
@@ -239,9 +245,16 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
         best_fold = fold
         best_fold_id_unrepeat_train= id_unrepeat_train# for correlation
         best_fold_id_unrepeat_val= id_unrepeat_val  
-        best_fold_best_epoch_attention_score_matrix=best_epoch_attention_score_matrix # torch.Size([bsz, 8, 50, 50])(without dropout)
+        best_fold_best_epoch_AttenScorMat_DrugSelf=best_epoch_AttenScorMat_DrugSelf # torch.Size([bsz, 8, 50, 50])(without dropout)
+        best_fold_best_epoch_AttenScorMat_DrugCellSelf=best_epoch_AttenScorMat_DrugCellSelf # torch.Size([bsz, 8, 50, 50])(without dropout)
     # print("best_fold_best_weight",best_fold_best_weight["MLP4omics_dict.Mut.0.weight"][0])    
     del model 
+    # Set the current device
+    torch.cuda.set_device("cuda:0")
+    # Optionally, force garbage collection to release memory 
+    gc.collect()
+    # Empty PyTorch cache
+    torch.cuda.empty_cache() # model 會從GPU消失，所以要evaluation時要重新load model
 # Saving the model weughts
 hyperparameter_folder_path = f'./results/BestFold{best_fold}_test_loss{best_test_loss:.7f}_BestValEpo{best_fold_best_epoch}_{hyperparameter_folder_part}' # /root/Winnie/PDAC
 os.makedirs(hyperparameter_folder_path, exist_ok=True)
@@ -249,9 +262,10 @@ save_path = os.path.join(hyperparameter_folder_path, f'BestValWeight.pt')
 torch.save(best_fold_best_weight, save_path)
 
 #--------------------------------------------------------------------------------------------------------------------------
-# average the 8head attention score matrix
-best_fold_best_epoch_attention_score_matrix = best_fold_best_epoch_attention_score_matrix.mean(dim=1)# torch.Size([bsz, 8, 50, 50])
-# ==>[bsz, 50, 50]
+# average the 8head AttenScorMat_DrugSelf and AttenScorMat_DrugCellSelf
+# best_fold_best_epoch_AttenScorMat_DrugSelf = best_fold_best_epoch_AttenScorMat_DrugSelf.mean(dim=1)# torch.Size([bsz, 8, 50, 50]) ==>[bsz, 50, 50]
+# best_fold_best_epoch_AttenScorMat_DrugCellSelf = best_fold_best_epoch_AttenScorMat_DrugCellSelf.mean(dim=1)# torch.Size([bsz, 8, 50, 50]) ==>[bsz, 50, 50]
+
 
 #--------------------------------------------------------------------------------------------------------------------------
 # Save the config file to the result directory
@@ -289,9 +303,16 @@ val_dataset = Subset(dataset, best_fold_id_val.tolist())
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
 # set_seed(seed)
-model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention,pos_emb_type,
+if model_name == "Omics_DrugESPF_Model":
+    model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                         drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-                        TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict).to(device=device)
+                        TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+elif model_name == "Omics_DCSA_model":
+    model = Omics_DCSA_model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
+                        drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
+                        TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+
+model.to(device=device)
 num_param = sum([param.nelement() for param in model.parameters()])
 print("Number of parameter: %.2fK" % (num_param/1e3))
 

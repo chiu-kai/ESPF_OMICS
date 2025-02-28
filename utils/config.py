@@ -4,7 +4,7 @@ import torch.nn as nn
 from utils.Loss import Custom_LossFunction,Custom_Weighted_LossFunction
 from utils.Custom_Activation_Function import ScaledSigmoid
 
-test = False #False, True: batch_size = 3, num_epoch = 2, full dataset
+test = True #False, True: batch_size = 3, num_epoch = 2, full dataset
 
 omics_files = {
     'Mut': "../data/CCLE/CCLE_match_TCGAgene_PRISMandEXPsample_binary_mutation_476_6009.txt",
@@ -24,12 +24,12 @@ TCGA_pretrain_weight_path_dict = {'Mut': "./results/Encoder_tcga_mut_1000_100_50
                                 }
 seed = 42
 #hyperparameter
-model_name = "Omics_DrugESPF_Model"
+model_name = "Omics_DCSA_model" # Omics_DCSA_model
 AUCtransform = "-log2" #"-log2"
 splitType= 'byDrug' # byCCL byDrug
 kfoldCV = 5
 include_omics = ['Exp']
-max_drug_len=50 # 不夠補零補到50 / 超過取前50個subwords(index) !!!!須改方法!!!!
+max_drug_len=50 # 不夠補零補到50 / 超過取前50個subwords(index) !!!!須改方法!!!! 
 drug_embedding_feature_size = 128
 ESPF = True # False True
 Drug_SelfAttention = True
@@ -43,7 +43,7 @@ hidden_dropout_prob = 0.1
 
 if ESPF is True:
     
-    drug_encode_dims =[1600,400,100] # 50*128
+    drug_encode_dims =[1600,400,100] # 50*128  
     dense_layer_dim = sum(omics_encode_dim_dict[omic_type][2] for omic_type in include_omics) + drug_encode_dims[2] # MLPDim
 elif ESPF is False:
     
