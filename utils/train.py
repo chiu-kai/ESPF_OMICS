@@ -90,14 +90,15 @@ def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,D
     model.requires_grad = False
     total_eval_loss = np.float32(0.0)
     batch_idx_without_nan_count=0 # if a batch has [] empty list than don't count
+    weight_loss_mask = None
     with torch.no_grad():
         for batch_idx,inputs in enumerate(eval_loader):
-            omics_tensor_dict,drug, target = inputs[0],inputs[1], inputs[-1].to(device=device)
+            omics_tensor_dict,drug, target = inputs[0],inputs[1], inputs[-1]#.to(device=device)
             model_output = model(omics_tensor_dict, drug, device, **{"ESPF":ESPF,"Drug_SelfAttention":Drug_SelfAttention}) #drug.to(torch.float32)
-            outputs = model_output[0]
+            outputs = model_output[0]  # model_output[1] # model_output[2]
             mask = ~torch.isnan(target)# Create a mask for non-NaN values in tensor # 去除nan的項
             target = target[mask]# Apply the mask to filter out NaN values from both tensors
-            predictedAUCwithoutGT = outputs # for unknown GroundTruth
+            predAUCwithUnknownGT = outputs # for unknown GroundTruth
             outputs = outputs[mask] #dtype = 'float32'
             # if isinstance(activation_func_final, nn.Sigmoid): # if ReLU(), no need
             #     outputs = outputs*valueMultiply
@@ -112,8 +113,8 @@ def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,D
                 #     total_eval_loss += (batch_val_loss.cpu().detach().numpy())/ (valueMultiply**2 if isinstance(criterion, nn.MSELoss) else valueMultiply)
                 # else:  # Custom_LossFunction
                 if weighted_threshold is not None:
-                    weights = torch.where(target > weighted_threshold, few_weight, more_weight)# Returns few_weight where condition is True.
-                batch_val_loss = criterion(outputs.reshape(-1), target.to(torch.float32).reshape(-1), model, weights)
+                    weight_loss_mask = torch.where(target > weighted_threshold, few_weight, more_weight)# Returns few_weight where condition is True.
+                batch_val_loss = criterion(outputs.reshape(-1), target.to(torch.float32).reshape(-1), model, weight_loss_mask)
                 # assert batch_val_loss.requires_grad == False  # Ensure no gradients are computed
                 total_eval_loss += (batch_val_loss.cpu().detach().numpy())
                     
@@ -129,9 +130,12 @@ def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,D
             val_epoch_loss_list.append(mean_batch_eval_loss)
             return mean_batch_eval_loss, val_epoch_loss_list
         # for inference after train epoch loop, and store output for correlation
-        elif correlation in ['train', 'val', 'test','whole']:
+        elif correlation in ['train', 'val', 'test']:
             # print(f'Evaluation {correlation} Loss: {mean_batch_eval_loss:.8f}')
-            return mean_batch_eval_loss, eval_targets, eval_outputs, predictedAUCwithoutGT
+            return mean_batch_eval_loss, eval_targets, eval_outputs, predAUCwithUnknownGT
+        elif correlation=='whole':
+            AttenScorMat_DrugCellSelf = model_output[2]
+            return predAUCwithUnknownGT, AttenScorMat_DrugCellSelf
         else:
             print('error occur when correlation argument is not correct')
             return 'error occur when correlation argument is not correct'
@@ -158,16 +162,17 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
     for epoch in range(num_epoch):
         total_train_loss = np.float32(0.0)
         batch_idx_without_nan_count=0 # if a batch has [] empty list than don't count
+        weight_loss_mask = None
         for batch_idx,inputs in enumerate(train_loader):
             optimizer.zero_grad()
             omics_tensor_dict,drug = inputs[0],inputs[1]
-            target = inputs[2].to(device=device)
+            target = inputs[2]#.to(device=device)
             
             model_output = model(omics_tensor_dict, drug, device,**{"ESPF":ESPF,"Drug_SelfAttention":Drug_SelfAttention}) #drug.to(torch.float32)
             outputs =model_output[0]
             
             # attention_score_matrix torch.Size([bsz, 8, 50, 50])# softmax(without dropout)
-            mask = ~torch.isnan(target,)# Create a mask for non-NaN values in tensor # 0:nan, 1:non-nan
+            mask = ~torch.isnan(target)# Create a mask for non-NaN values in tensor # 0:nan, 1:non-nan
 
             target = target[mask]# Apply the mask to filter out NaN values from both tensors # 去除nan的項 [nan, 0.7908]->[0.7908]
             outputs = outputs[mask]
@@ -180,8 +185,8 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
                 #     loss = criterion(outputs.reshape(-1), target.to(torch.float32).reshape(-1))
                 # else:  # Custom_LossFunction
                 if weighted_threshold is not None:
-                    weights = torch.where(target > weighted_threshold, few_weight, more_weight)
-                loss = criterion(outputs.reshape(-1), target.to(torch.float32).reshape(-1), model, weights)
+                    weight_loss_mask = torch.where(target > weighted_threshold, few_weight, more_weight)
+                loss = criterion(outputs.reshape(-1), target.to(torch.float32).reshape(-1), model, weight_loss_mask)
                 # assert loss.requires_grad == True  # Ensure gradients are being computed
                 loss.backward()  # Compute gradients
                 if TrackGradient is True:

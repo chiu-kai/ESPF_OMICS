@@ -20,7 +20,7 @@ import os
 import importlib.util
 
 from utils.ESPF_drug2emb import drug2emb_encoder
-from utils.Model import Omics_DrugESPF_Model, Omics_DCSA_model
+from utils.Model import Omics_DrugESPF_Model, Omics_DCSA_Model
 from utils.split_data_id import split_id,repeat_func
 from utils.create_dataloader import OmicsDrugDataset
 from utils.train import train, evaluation
@@ -58,7 +58,7 @@ for omic_type in include_omics:
     if test is True:
         # Specify the index as needed
         omics_data_dict[omic_type] = omics_data_dict[omic_type][:76]  # Adjust the row selection as needed
-    omics_data_tensor_dict[omic_type]  = torch.tensor(omics_data_dict[omic_type].values, dtype=torch.float32)
+    omics_data_tensor_dict[omic_type]  = torch.tensor(omics_data_dict[omic_type].values, dtype=torch.float32).to(device)
     omics_numfeatures_dict[omic_type] = omics_data_tensor_dict[omic_type].shape[1]
     print(f"{omic_type} tensor shape:", omics_data_tensor_dict[omic_type].shape)
     print(f"{omic_type} num_features",omics_numfeatures_dict[omic_type])
@@ -135,13 +135,13 @@ if ESPF is True:
     #print((drug_encode.values).shape)#(42,)
     # print(drug_encode.values.tolist())
     # Convert your data to tensors if they're in numpy
-    drug_features_tensor = torch.tensor(np.array(drug_encode.values.tolist()), dtype=torch.long)
+    drug_features_tensor = torch.tensor(np.array(drug_encode.values.tolist()), dtype=torch.long).to(device)
 else:
     drug_encode = drug_df["MACCS166bits"]
     drug_encode_list = [list(map(int, item.split(','))) for item in drug_encode.values]
     print("MACCS166bits_drug_encode_list type: ",type(drug_encode_list))
     # Convert your data to tensors if they're in numpy
-    drug_features_tensor = torch.tensor(np.array(drug_encode_list), dtype=torch.long)
+    drug_features_tensor = torch.tensor(np.array(drug_encode_list), dtype=torch.long).to(device)
 #--------------------------------------------------------------------------------------------------------------------------
 num_ccl = list(omics_data_dict.values())[0].shape[0]
 num_drug = drug_encode.shape[0]
@@ -149,7 +149,7 @@ print("num_ccl,num_drug: ",num_ccl,num_drug)
 
 #--------------------------------------------------------------------------------------------------------------------------
 # Convert your data to tensors if they're in numpy
-response_matrix_tensor = torch.tensor(AUC_df.values, dtype=torch.float32)
+response_matrix_tensor = torch.tensor(AUC_df.values, dtype=torch.float32).to(device)
 
 #--------------------------------------------------------------------------------------------------------------------------
 # randomly split
@@ -168,7 +168,7 @@ set_seed(seed)
 dataset = OmicsDrugDataset(omics_data_tensor_dict, drug_features_tensor, response_matrix_tensor, splitType, include_omics)
 
 test_dataset = Subset(dataset, id_test.tolist())
-test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)#, num_workers=4, pin_memory=True
 #--------------------------------------------------------------------------------------------------------------------------
 # k-fold run
 kfold_losses= {}
@@ -193,9 +193,9 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
 
     set_seed(seed)
     train_dataset = Subset(dataset, id_train.tolist())# create dataset
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True) #, num_workers=4, pin_memory=True
     val_dataset = Subset(dataset, id_val.tolist())
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False) # , num_workers=4, pin_memory=True
 
     # train
     # Init the neural network 
@@ -204,8 +204,8 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
         model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
                             TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
-    elif model_name == "Omics_DCSA_model":
-        model = Omics_DCSA_model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
+    elif model_name == "Omics_DCSA_Model":
+        model = Omics_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
                             TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
 
@@ -298,17 +298,17 @@ best_fold_id_train = repeat_func(best_fold_id_unrepeat_train, repeatNum, setname
 best_fold_id_val = repeat_func(best_fold_id_unrepeat_val, repeatNum, setname='val')
 set_seed(seed)
 train_dataset = Subset(dataset, best_fold_id_train.tolist())
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False) #, num_workers=4, pin_memory=True
 val_dataset = Subset(dataset, best_fold_id_val.tolist())
-val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False) # , num_workers=4, pin_memory=True
 
 # set_seed(seed)
 if model_name == "Omics_DrugESPF_Model":
     model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                         drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
                         TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
-elif model_name == "Omics_DCSA_model":
-    model = Omics_DCSA_model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
+elif model_name == "Omics_DCSA_Model":
+    model = Omics_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                         drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
                         TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
 

@@ -4,7 +4,7 @@ import torch.nn as nn
 from utils.Loss import Custom_LossFunction,Custom_Weighted_LossFunction
 from utils.Custom_Activation_Function import ScaledSigmoid
 
-test = True #False, True: batch_size = 3, num_epoch = 2, full dataset
+test = False #False, True: batch_size = 3, num_epoch = 2, full dataset
 
 omics_files = {
     'Mut': "../data/CCLE/CCLE_match_TCGAgene_PRISMandEXPsample_binary_mutation_476_6009.txt",
@@ -24,9 +24,9 @@ TCGA_pretrain_weight_path_dict = {'Mut': "./results/Encoder_tcga_mut_1000_100_50
                                 }
 seed = 42
 #hyperparameter
-model_name = "Omics_DCSA_model" # Omics_DCSA_model
+model_name = "Omics_DCSA_Model" # Omics_DCSA_Model  Omics_DrugESPF_Model
 AUCtransform = "-log2" #"-log2"
-splitType= 'byDrug' # byCCL byDrug
+splitType= 'byCCL' # byCCL byDrug
 kfoldCV = 5
 include_omics = ['Exp']
 max_drug_len=50 # 不夠補零補到50 / 超過取前50個subwords(index) !!!!須改方法!!!! 
@@ -42,11 +42,9 @@ attention_probs_dropout_prob = 0.1
 hidden_dropout_prob = 0.1
 
 if ESPF is True:
-    
     drug_encode_dims =[1600,400,100] # 50*128  
     dense_layer_dim = sum(omics_encode_dim_dict[omic_type][2] for omic_type in include_omics) + drug_encode_dims[2] # MLPDim
 elif ESPF is False:
-    
     drug_encode_dims =[110,55,22]
     dense_layer_dim = sum(omics_encode_dim_dict[omic_type][2] for omic_type in include_omics) + drug_encode_dims[2] # MLPDim
 #需再修改-------------
@@ -61,8 +59,8 @@ patience = 20
 warmup_iters = 60
 Decrease_percent = 0.9
 continuous = True
-learning_rate=1e-05
-criterion = Custom_Weighted_LossFunction(loss_type="weighted_MSE", loss_lambda=1.0, regular_type="L2", regular_lambda=1e-05) #nn.MSELoss()#
+learning_rate=5e-05
+criterion = Custom_LossFunction(loss_type="MSE", loss_lambda=1.0, regular_type=None, regular_lambda=1e-06) #nn.MSELoss()# Custom_Weighted_LossFunction / Custom_LossFunction
 """ A customizable loss function class.
     Args:
         loss_type (str): The type of loss to use ("RMSE", "MSE", "MAE", "MAE+MSE", "MAE+RMSE")/("weighted_RMSE", "weighted_MSE", "weighted_MAE", "weighted_MAE+MSE", "weighted_MAE+RMSE").

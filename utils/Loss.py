@@ -94,7 +94,8 @@ class Custom_LossFunction(nn.Module):
         self.loss_lambda = loss_lambda
         self.regular_type = regular_type
         self.regular_lambda = regular_lambda
-
+        self.penalty_value = None
+        
         self.mse_loss = nn.MSELoss()
         self.mae_loss = nn.L1Loss()
 
