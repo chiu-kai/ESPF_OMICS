@@ -17,7 +17,7 @@ class Custom_Weighted_LossFunction(nn.Module):
 
         self.mse_loss = nn.MSELoss(reduction="none")  # Keep per-sample loss # 不要取平均 #輸出sample loss list
         self.mae_loss = nn.L1Loss(reduction="none")  # Keep per-sample loss # 不要取平均 #輸出sample loss list
-
+        
     def forward(self, prediction, target, model=None, weights=None):
         """
         Compute the loss based on the specified loss type, regularization, and weights.
@@ -46,13 +46,14 @@ class Custom_Weighted_LossFunction(nn.Module):
             batch_sample_loss = mae + self.loss_lambda * torch.sqrt(mse)
         else:
             raise ValueError(f"Unsupported loss type: {self.loss_type}")
-        
+        # batch_sample_loss.shape : torch.Size([sample's number in a batch])
+
         # Apply weight to each sample loss 
         if weights is not None:
             batch_sample_loss *= weights 
 
         # Aggregate loss (mean over batch)
-        loss = batch_sample_loss.mean()
+        self.loss = batch_sample_loss.mean()
 
         # Add regularization penalty if specified
         if self.regular_type and model:
@@ -64,10 +65,10 @@ class Custom_Weighted_LossFunction(nn.Module):
                 reg_penalty = sum(p.abs().sum() + p.pow(2).sum() for p in model.parameters())
             else:
                 raise ValueError(f"Unsupported regularization type: {self.regular_type}")
-            loss += self.regular_lambda * reg_penalty
+            loss_with_penalty = self.loss + self.regular_lambda * reg_penalty
             self.penalty_value = self.regular_lambda * reg_penalty
 
-        return loss
+        return loss_with_penalty
 
     def __repr__(self):
         return (f"Custom_Weighted_LossFunction(loss_type={self.loss_type}, "
@@ -94,10 +95,10 @@ class Custom_LossFunction(nn.Module):
         self.loss_lambda = loss_lambda
         self.regular_type = regular_type
         self.regular_lambda = regular_lambda
+        self.penalty_value = None
 
-        self.mse_loss = nn.MSELoss()
-        self.mae_loss = nn.L1Loss()
-
+        self.mse_loss = nn.MSELoss() # reduction (default 'mean')
+        self.mae_loss = nn.L1Loss() # reduction (default 'mean')
     def forward(self, prediction, target, model=None, weights=None):
         """
         Compute the loss based on the specified loss type and regularization.
@@ -109,19 +110,19 @@ class Custom_LossFunction(nn.Module):
             Tensor: The computed loss.
         """
         if self.loss_type == "RMSE":
-            loss = torch.sqrt(self.mse_loss(prediction, target))
+            self.loss = torch.sqrt(self.mse_loss(prediction, target))
         elif self.loss_type == "MSE":
-            loss = self.mse_loss(prediction, target)
+            self.loss = self.mse_loss(prediction, target)
         elif self.loss_type == "MAE":
-            loss = self.mae_loss(prediction, target)
+            self.loss = self.mae_loss(prediction, target)
         elif self.loss_type == "MAE+MSE":
             mae = self.mae_loss(prediction, target)
             mse = self.mse_loss(prediction, target)
-            loss = mae + self.loss_lambda * mse
+            self.loss = mae + self.loss_lambda * mse
         elif self.loss_type == "MAE+RMSE":
             mae = self.mae_loss(prediction, target)
             mse = self.mse_loss(prediction, target)
-            loss = mae + self.loss_lambda * torch.sqrt(mse)
+            self.loss = mae + self.loss_lambda * torch.sqrt(mse)
         else:
             raise ValueError(f"Unsupported loss type: {self.loss_type}")
 
@@ -135,8 +136,10 @@ class Custom_LossFunction(nn.Module):
                 reg_penalty = sum(p.abs().sum() + p.pow(2).sum() for p in model.parameters())
             else:
                 raise ValueError(f"Unsupported regularization type: {self.regular_type}")
-            loss += self.regular_lambda * reg_penalty
-        return loss
+            loss_with_penalty = self.loss + self.regular_lambda * reg_penalty
+            self.penalty_value = self.regular_lambda * reg_penalty
+            return loss_with_penalty
+        return self.loss
 
     def __repr__(self):
         return (f"Custom_LossFunction(loss_type={self.loss_type}, "

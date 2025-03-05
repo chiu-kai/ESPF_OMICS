@@ -31,6 +31,7 @@ class OmicsDrugDataset(Dataset):
         
         self.omics_data_tensor = {omic_type: self.omics_data_tensor_dict[omic_type][self.cell_idx] 
                              for omic_type in self.include_omics}
+        
         drug_features = self.drug_features_tensor[self.drug_idx]
         response_value = self.response_matrix_tensor[self.cell_idx, self.drug_idx]
         return  self.omics_data_tensor, drug_features, response_value

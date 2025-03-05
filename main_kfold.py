@@ -20,7 +20,7 @@ import os
 import importlib.util
 
 from utils.ESPF_drug2emb import drug2emb_encoder
-from utils.Model import Omics_DrugESPF_Model, Omics_DCSA_model
+from utils.Model import Omics_DrugESPF_Model, Omics_DCSA_Model
 from utils.split_data_id import split_id,repeat_func
 from utils.create_dataloader import OmicsDrugDataset
 from utils.train import train, evaluation
@@ -46,8 +46,6 @@ for key, value in vars(config).items():
 device = (torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'))
 print(f"Training on device {device}.")
 
-#--------------------------------------------------------------------------------------------------------------------------
-
 
 #--------------------------------------------------------------------------------------------------------------------------
 set_seed(seed)
@@ -58,7 +56,7 @@ for omic_type in include_omics:
     if test is True:
         # Specify the index as needed
         omics_data_dict[omic_type] = omics_data_dict[omic_type][:76]  # Adjust the row selection as needed
-    omics_data_tensor_dict[omic_type]  = torch.tensor(omics_data_dict[omic_type].values, dtype=torch.float32)
+    omics_data_tensor_dict[omic_type]  = torch.tensor(omics_data_dict[omic_type].values, dtype=torch.float32).to(device)
     omics_numfeatures_dict[omic_type] = omics_data_tensor_dict[omic_type].shape[1]
     print(f"{omic_type} tensor shape:", omics_data_tensor_dict[omic_type].shape)
     print(f"{omic_type} num_features",omics_numfeatures_dict[omic_type])
@@ -135,13 +133,13 @@ if ESPF is True:
     #print((drug_encode.values).shape)#(42,)
     # print(drug_encode.values.tolist())
     # Convert your data to tensors if they're in numpy
-    drug_features_tensor = torch.tensor(np.array(drug_encode.values.tolist()), dtype=torch.long)
+    drug_features_tensor = torch.tensor(np.array(drug_encode.values.tolist()), dtype=torch.long).to(device)
 else:
     drug_encode = drug_df["MACCS166bits"]
     drug_encode_list = [list(map(int, item.split(','))) for item in drug_encode.values]
     print("MACCS166bits_drug_encode_list type: ",type(drug_encode_list))
     # Convert your data to tensors if they're in numpy
-    drug_features_tensor = torch.tensor(np.array(drug_encode_list), dtype=torch.long)
+    drug_features_tensor = torch.tensor(np.array(drug_encode_list), dtype=torch.long).to(device)
 #--------------------------------------------------------------------------------------------------------------------------
 num_ccl = list(omics_data_dict.values())[0].shape[0]
 num_drug = drug_encode.shape[0]
@@ -149,7 +147,7 @@ print("num_ccl,num_drug: ",num_ccl,num_drug)
 
 #--------------------------------------------------------------------------------------------------------------------------
 # Convert your data to tensors if they're in numpy
-response_matrix_tensor = torch.tensor(AUC_df.values, dtype=torch.float32)
+response_matrix_tensor = torch.tensor(AUC_df.values, dtype=torch.float32).to(device)
 
 #--------------------------------------------------------------------------------------------------------------------------
 # randomly split
@@ -168,7 +166,7 @@ set_seed(seed)
 dataset = OmicsDrugDataset(omics_data_tensor_dict, drug_features_tensor, response_matrix_tensor, splitType, include_omics)
 
 test_dataset = Subset(dataset, id_test.tolist())
-test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False) #, num_workers=4, pin_memory=True
 #--------------------------------------------------------------------------------------------------------------------------
 # k-fold run
 kfold_losses= {}
@@ -193,9 +191,9 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
 
     set_seed(seed)
     train_dataset = Subset(dataset, id_train.tolist())# create dataset
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True) #, num_workers=4, pin_memory=True
     val_dataset = Subset(dataset, id_val.tolist())
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False) #, num_workers=4, pin_memory=True
 
     # train
     # Init the neural network 
@@ -204,8 +202,8 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
         model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
                             TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
-    elif model_name == "Omics_DCSA_model":
-        model = Omics_DCSA_model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
+    elif model_name == "Omics_DCSA_Model":
+        model = Omics_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
                             TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
 
@@ -214,16 +212,16 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)# Initialize optimizer
 
     
-    best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list,best_val_epoch_train_loss,best_epoch_AttenScorMat_DrugSelf ,best_epoch_AttenScorMat_DrugCellSelf, gradient_fig,gradient_norms_list = train( model,
+    best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list,best_val_epoch_train_loss,best_val_epoch_train_lossWOpenalty,best_epoch_AttenScorMat_DrugSelf ,best_epoch_AttenScorMat_DrugCellSelf, gradient_fig,gradient_norms_list = train( model,
         optimizer,      batch_size,      num_epoch,      patience,      warmup_iters,      Decrease_percent,    continuous,
         learning_rate,      criterion,      train_loader,      val_loader,
         device,ESPF,Drug_SelfAttention, seed, kfoldCV ,weighted_threshold, few_weight, more_weight, TrackGradient)
-
+    # best_val_loss = mean_batch_eval_lossWOpenalty
     print("best Epoch : ",best_epoch,"best_val_loss : ",best_val_loss,"best_val_epoch_train_loss : ",best_val_epoch_train_loss," batch_size : ",batch_size,
             "learning_rate : ",learning_rate," warmup_iters :" ,warmup_iters  ," with Decrease_percent : ",Decrease_percent )
 
     kfold_losses[fold] = {
-    'train': best_val_epoch_train_loss,  # Train loss in best Validation epoch
+    'train': best_val_epoch_train_lossWOpenalty,  # Train loss in best Validation epoch
     'val': best_val_loss,  # best epoch
     'test': None  # Placeholder for test loss
     }   
@@ -231,22 +229,22 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     model.load_state_dict(best_weight)  
     model.to(device=device)
     
-    test_loss,_,_,_ = evaluation(model, None, criterion, test_loader, device,ESPF, Drug_SelfAttention,weighted_threshold, few_weight, more_weight, correlation='test')
+    _,_,_,_,test_lossWOpenalty = evaluation(model, None, criterion, test_loader, device,ESPF, Drug_SelfAttention,weighted_threshold, few_weight, more_weight, correlation='test')
 
-    kfold_losses[fold]['test'] = test_loss
+    kfold_losses[fold]['test'] = test_lossWOpenalty
     # save best fold testing loss model weight
-    if test_loss < best_test_loss:
-        best_test_loss = test_loss
+    if test_lossWOpenalty < best_test_loss:
+        best_test_loss = test_lossWOpenalty
         best_fold_train_epoch_loss_list = train_epoch_loss_list #  for train epoch loss plot
         best_fold_val_epoch_loss_list = val_epoch_loss_list #  for validation epoch loss plot
         best_fold_best_epoch = best_epoch #  for validation epoch loss plot
-        best_fold_best_val_loss = best_val_loss #  for validation epoch loss plot
+        best_fold_best_val_loss = best_val_loss #  for validation epoch loss plot # best_val_loss = best_val_lossWOpenalty
         best_fold_best_weight = copy.deepcopy(best_weight) # best fold best epoch 
         best_fold = fold
         best_fold_id_unrepeat_train= id_unrepeat_train# for correlation
         best_fold_id_unrepeat_val= id_unrepeat_val  
-        best_fold_best_epoch_AttenScorMat_DrugSelf=best_epoch_AttenScorMat_DrugSelf # torch.Size([bsz, 8, 50, 50])(without dropout)
-        best_fold_best_epoch_AttenScorMat_DrugCellSelf=best_epoch_AttenScorMat_DrugCellSelf # torch.Size([bsz, 8, 50, 50])(without dropout)
+        # best_fold_best_epoch_AttenScorMat_DrugSelf=best_epoch_AttenScorMat_DrugSelf # torch.Size([bsz, 8, 50, 50])(without dropout)
+        # best_fold_best_epoch_AttenScorMat_DrugCellSelf=best_epoch_AttenScorMat_DrugCellSelf # torch.Size([bsz, 8, 50, 50])(without dropout)
     # print("best_fold_best_weight",best_fold_best_weight["MLP4omics_dict.Mut.0.weight"][0])    
     del model 
     # Set the current device
@@ -298,17 +296,17 @@ best_fold_id_train = repeat_func(best_fold_id_unrepeat_train, repeatNum, setname
 best_fold_id_val = repeat_func(best_fold_id_unrepeat_val, repeatNum, setname='val')
 set_seed(seed)
 train_dataset = Subset(dataset, best_fold_id_train.tolist())
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False) # , num_workers=4, pin_memory=True)
 val_dataset = Subset(dataset, best_fold_id_val.tolist())
-val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False) # , num_workers=4, pin_memory=True)
 
 # set_seed(seed)
 if model_name == "Omics_DrugESPF_Model":
     model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                         drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
                         TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
-elif model_name == "Omics_DCSA_model":
-    model = Omics_DCSA_model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
+elif model_name == "Omics_DCSA_Model":
+    model = Omics_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                         drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
                         TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
 
@@ -320,18 +318,18 @@ print("Number of parameter: %.2fK" % (num_param/1e3))
 # Evaluation on the train set
 model.load_state_dict(best_fold_best_weight)  
 model.to(device=device)
-train_loss, train_targets, train_outputs, _ = evaluation(model, val_epoch_loss_list, criterion, train_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='train')
+_, train_targets, train_outputs, _, train_lossWOpenalty = evaluation(model, val_epoch_loss_list, criterion, train_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='train')
 # Compute and print all metrics
 metrics_calculator = MetricsCalculator()
 
 train_metrics= metrics_calculator.compute_all_metrics(np.concatenate(train_targets), np.concatenate(train_outputs),set_name='train_set')
 # metrics_calculator.print_results(set_name='train_set')
 # Evaluation on the validation set
-val_loss, val_targets, val_outputs, _ = evaluation(model, val_epoch_loss_list, criterion, val_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='val')
+_, val_targets, val_outputs, _ , val_lossWOpenalty = evaluation(model, val_epoch_loss_list, criterion, val_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='val')
 val_metrics= metrics_calculator.compute_all_metrics(np.concatenate(val_targets), np.concatenate(val_outputs),set_name='val_set')
 # metrics_calculator.print_results(set_name='val_set')
 # Evaluation on the test set
-test_loss, test_targets, test_outputs, _ = evaluation(model, val_epoch_loss_list, criterion, test_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='test')
+_, test_targets, test_outputs, _ , test_lossWOpenalty = evaluation(model, val_epoch_loss_list, criterion, test_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='test')
 test_metrics= metrics_calculator.compute_all_metrics(np.concatenate(test_targets), np.concatenate(test_outputs),set_name='test_set')
 # metrics_calculator.print_results(set_name='test_set')
 
@@ -390,9 +388,9 @@ with open(output_file, "w") as file:
     file.write(f'BestFold: {best_fold}\n')
     file.write(f'best_fold_best_epoch: {best_fold_best_epoch}\n')
     #'----------------After Evaluation-------------- #紀錄
-    file.write(f'Evaluation Train Loss: {train_loss:.7f}\n')
-    file.write(f'Evaluation validation Loss: {val_loss:.7f}\n')
-    file.write(f'Evaluation Test Loss: {test_loss:.7f}\n')
+    file.write(f'Evaluation Train Loss: {train_lossWOpenalty:.7f}\n')
+    file.write(f'Evaluation validation Loss: {val_lossWOpenalty:.7f}\n')
+    file.write(f'Evaluation Test Loss: {test_lossWOpenalty:.7f}\n')
 
     # Metrics
     for name, metrics in [("Train_set", train_metrics),("val_set", val_metrics),("test_set", test_metrics)]:
