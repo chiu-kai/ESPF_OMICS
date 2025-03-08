@@ -10,6 +10,7 @@ import torch.optim as optim
 from torch.utils.data import  DataLoader, Subset
 import torch.nn.init as init
 from sklearn.model_selection import KFold
+from sklearn.preprocessing import MinMaxScaler
 import copy
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -56,6 +57,10 @@ for omic_type in include_omics:
     if test is True:
         # Specify the index as needed
         omics_data_dict[omic_type] = omics_data_dict[omic_type][:76]  # Adjust the row selection as needed
+    if omic_type == "Exp":# apply Column-wise Min-Max Normalization 
+        scaler = MinMaxScaler() 
+        omics_data_dict[omic_type] = pd.DataFrame(scaler.fit_transform(omics_data_dict[omic_type]))
+
     omics_data_tensor_dict[omic_type]  = torch.tensor(omics_data_dict[omic_type].values, dtype=torch.float32).to(device)
     omics_numfeatures_dict[omic_type] = omics_data_tensor_dict[omic_type].shape[1]
     print(f"{omic_type} tensor shape:", omics_data_tensor_dict[omic_type].shape)
@@ -229,7 +234,7 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     model.load_state_dict(best_weight)  
     model.to(device=device)
     
-    _,_,_,_,test_lossWOpenalty = evaluation(model, None, criterion, test_loader, device,ESPF, Drug_SelfAttention,weighted_threshold, few_weight, more_weight, correlation='test')
+    _,_,_,_,test_lossWOpenalty,_ = evaluation(model, None, criterion, test_loader, device,ESPF, Drug_SelfAttention,weighted_threshold, few_weight, more_weight, outputcontrol='correlation')
 
     kfold_losses[fold]['test'] = test_lossWOpenalty
     # save best fold testing loss model weight
@@ -318,20 +323,20 @@ print("Number of parameter: %.2fK" % (num_param/1e3))
 # Evaluation on the train set
 model.load_state_dict(best_fold_best_weight)  
 model.to(device=device)
-_, train_targets, train_outputs, _, train_lossWOpenalty = evaluation(model, val_epoch_loss_list, criterion, train_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='train')
+_, train_targets, train_outputs, _, train_lossWOpenalty,_ = evaluation(model, val_epoch_loss_list, criterion, train_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, outputcontrol='correlation')
 # Compute and print all metrics
 metrics_calculator = MetricsCalculator()
-
 train_metrics= metrics_calculator.compute_all_metrics(np.concatenate(train_targets), np.concatenate(train_outputs),set_name='train_set')
 # metrics_calculator.print_results(set_name='train_set')
 # Evaluation on the validation set
-_, val_targets, val_outputs, _ , val_lossWOpenalty = evaluation(model, val_epoch_loss_list, criterion, val_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='val')
+_, val_targets, val_outputs, _ , val_lossWOpenalty,_ = evaluation(model, val_epoch_loss_list, criterion, val_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, outputcontrol='correlation')
 val_metrics= metrics_calculator.compute_all_metrics(np.concatenate(val_targets), np.concatenate(val_outputs),set_name='val_set')
 # metrics_calculator.print_results(set_name='val_set')
 # Evaluation on the test set
-_, test_targets, test_outputs, _ , test_lossWOpenalty = evaluation(model, val_epoch_loss_list, criterion, test_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='test')
+_, test_targets, test_outputs, _ , test_lossWOpenalty,test_outputs_before_final_activation_list = evaluation(model, val_epoch_loss_list, criterion, test_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, outputcontrol='correlation')
 test_metrics= metrics_calculator.compute_all_metrics(np.concatenate(test_targets), np.concatenate(test_outputs),set_name='test_set')
 # metrics_calculator.print_results(set_name='test_set')
+
 
 #--------------------------------------------------------------------------------------------------------------------------
 # Correlation
@@ -428,5 +433,9 @@ with open(output_file, "w") as file:
                                     ("Validation", val_spearman),
                                     ("Test", test_spearman)]:
         file.write(f"Mean Median Mode {name} Spearman {model_name}:\t{np.mean(spearman):.6f} ± {np.std(spearman):.4f}\t{stats.skew(spearman, bias=False, nan_policy='raise'):.6f}\t {np.median(spearman):.6f}\t{stats.mode(np.round(spearman,2))}\n")
+        
+    file.write(f"test_targets\n{test_targets[0][:10]}\n")
+    file.write(f"test_outputs_before_final_activation_list\n{test_outputs_before_final_activation_list[0][:10]}\n")
+    file.write(f"test_outputs\n{test_outputs[0][:10]}\n")
     print("Output saved to:", output_file)
 #--------------------------------------------------------------------------------------------------------------------------

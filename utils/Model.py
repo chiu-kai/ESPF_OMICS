@@ -149,7 +149,7 @@ class Embeddings(nn.Module): # word embedding + positional encoding
         elif pos_emb_type == "sinusoidal":#Sinusoidal Position Encoding
             self.position_embeddings = SinusoidalPositionalEncoding(hidden_size, max_len=max_drug_len)#(128,50)
             
-        self.LayerNorm = LayerNorm(hidden_size)#128
+        self.LayerNorm = nn.LayerNorm(hidden_size)#128
         self.dropout = nn.Dropout(hidden_dropout_prob)#0.1
     def forward(self, seq):# torch.Size([bsz, 50]) # 50個子結構id 
         words_embeddings = self.word_embeddings(seq) #seq:(batchsize=64,50)# generate(bze,50,128)類別特徵
@@ -228,7 +228,7 @@ class SelfOutput(nn.Module): # apply linear and skip conneaction and LayerNorm a
     def __init__(self, hidden_size, dropout_prob):
         super(SelfOutput, self).__init__()# (128,0.1)
         self.dense = nn.Linear(hidden_size, hidden_size)
-        self.LayerNorm = LayerNorm(hidden_size)
+        self.LayerNorm = nn.LayerNorm(hidden_size)
         self.dropout = nn.Dropout(dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
@@ -264,7 +264,7 @@ class Output(nn.Module):# do linear, skip connection, LayerNorm, dropout after i
     def __init__(self, intermediate_size, hidden_size, hidden_dropout_prob):
         super(Output, self).__init__()# (512,128,0.1)
         self.dense = nn.Linear(intermediate_size, hidden_size)
-        self.LayerNorm = LayerNorm(hidden_size)
+        self.LayerNorm = nn.LayerNorm(hidden_size)
         self.dropout = nn.Dropout(hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
@@ -383,8 +383,9 @@ class Omics_DrugESPF_Model(nn.Module):
                 nn.Linear(omics_numfeaetures_dict[omic_type], omics_encode_dim_dict[omic_type][0]),
                 activation_func,
                 nn.Linear(omics_encode_dim_dict[omic_type][0], omics_encode_dim_dict[omic_type][1]),
-                activation_func_final,
-                nn.Linear(omics_encode_dim_dict[omic_type][1], omics_encode_dim_dict[omic_type][2])
+                activation_func,
+                nn.Linear(omics_encode_dim_dict[omic_type][1], omics_encode_dim_dict[omic_type][2]),
+                activation_func
             )
             # Initialize with TCGA pretrain weight
             if TCGA_pretrain_weight_path_dict is not None:
@@ -540,8 +541,9 @@ class Omics_DCSA_Model(nn.Module):
                 nn.Linear(omics_numfeaetures_dict[omic_type], omics_encode_dim_dict[omic_type][0]),
                 activation_func,
                 nn.Linear(omics_encode_dim_dict[omic_type][0], omics_encode_dim_dict[omic_type][1]),
-                activation_func_final,
-                nn.Linear(omics_encode_dim_dict[omic_type][1], omics_encode_dim_dict[omic_type][2])
+                activation_func,
+                nn.Linear(omics_encode_dim_dict[omic_type][1], omics_encode_dim_dict[omic_type][2]),
+                activation_func
             )
             # Initialize with TCGA pretrain weight
             if TCGA_pretrain_weight_path_dict is not None:
@@ -679,6 +681,7 @@ class Omics_DCSA_Model(nn.Module):
         # drug 有50*128，omices有i*128，可能會差太多，看drug要不要先降維根omics一樣i*128 # 先不要
     
     # Final MLP
+        output_before_final_activation = self.model_final_add[:-1](append_embeddings)
         output = self.model_final_add(append_embeddings)
 
-        return output, AttenScorMat_DrugSelf, AttenScorMat_DrugCellSelf
+        return output, AttenScorMat_DrugSelf, AttenScorMat_DrugCellSelf,output_before_final_activation

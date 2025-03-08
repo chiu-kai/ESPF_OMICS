@@ -82,10 +82,11 @@ def log_gradient_norms(model):
     print(f"Total Gradient Norm: {total_norm:.4f}")
     return total_norm
 
-def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='' ):
+def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,Drug_SelfAttention, weighted_threshold, few_weight, more_weight, outputcontrol='' ):
     torch.manual_seed(42)
     eval_outputs = [] # for correlation
     eval_targets = [] # for correlation
+    eval_outputs_before_final_activation_list = []
     model.eval()
     model.requires_grad = False
     total_eval_loss = np.float32(0.0)
@@ -99,13 +100,15 @@ def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,D
             outputs = model_output[0]  # model_output[1] # model_output[2] # output.shape(n_sample, 1)
             mask = ~torch.isnan(target)# Create a mask for non-NaN values in tensor # 去除nan的項 # mask.shape(n_sample, 1)
             target = target[mask]# Apply the mask to filter out NaN values from both tensors # target.shape(n_sample, 1)->(n_sample-nan, 1)
+            
             predAUCwithUnknownGT = outputs # for unknown GroundTruth
             outputs = outputs[mask] #dtype = 'float32'
             # if isinstance(activation_func_final, nn.Sigmoid): # if ReLU(), no need
             #     outputs = outputs*valueMultiply
             eval_outputs.append(outputs.detach().cpu().numpy().reshape(-1)) #dtype = 'float32'
             eval_targets.append(target.detach().cpu().numpy().reshape(-1))
-            
+            if outputcontrol != 'plotLossCurve':
+                eval_outputs_before_final_activation_list.append((model_output[3])[mask].detach().cpu().numpy().reshape(-1))
             if target.numel() != 0: # check if a batch do not has [] empty list 
                 batch_idx_without_nan_count+=1
                 # if isinstance(criterion, (nn.MSELoss, nn.L1Loss)):
@@ -125,21 +128,21 @@ def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,D
             mean_batch_eval_lossWOpenalty = (total_eval_lossWOpenalty/(batch_idx_without_nan_count)).astype('float32')
 
         # just for evaluation in train epoch loop , and plot the epochs loss, not for correlation
-        if correlation=='plotLossCurve': 
+        if outputcontrol =='plotLossCurve': 
             # print(f'Epoch [{epoch + 1}/{num_epoch}] - mean_batch Validation Loss: {mean_batch_eval_loss:.8f}')
             # val_epoch_loss_list.append(mean_batch_eval_loss)
             val_epoch_loss_list.append(mean_batch_eval_lossWOpenalty)
             return mean_batch_eval_loss, val_epoch_loss_list,mean_batch_eval_lossWOpenalty
         # for inference after train epoch loop, and store output for correlation
-        elif correlation in ['train', 'val', 'test']:
-            # print(f'Evaluation {correlation} Loss: {mean_batch_eval_loss:.8f}')
-            return mean_batch_eval_loss, eval_targets, eval_outputs, predAUCwithUnknownGT,mean_batch_eval_lossWOpenalty
-        elif correlation=='whole':
+        elif outputcontrol == 'correlation':
+            # print(f'Evaluation {outputcontrol} Loss: {mean_batch_eval_loss:.8f}')
+            return mean_batch_eval_loss, eval_targets, eval_outputs, predAUCwithUnknownGT,mean_batch_eval_lossWOpenalty,eval_outputs_before_final_activation_list
+        elif outputcontrol =='inference':
             AttenScorMat_DrugCellSelf = model_output[2]
-            return predAUCwithUnknownGT, AttenScorMat_DrugCellSelf
+            return eval_targets, eval_outputs,predAUCwithUnknownGT, AttenScorMat_DrugCellSelf,eval_outputs_before_final_activation_list
         else:
-            print('error occur when correlation argument is not correct')
-            return 'error occur when correlation argument is not correct'
+            print('error occur when outputcontrol argument is not correct')
+            return 'error occur when outputcontrol argument is not correct'
 
 
 
@@ -207,7 +210,7 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
             train_epoch_loss_list.append(mean_batch_train_lossWOpenalty) # mean_batch_train_loss = epoch_train_loss
             # print(f'Epoch [{epoch + 1}/{num_epoch}] - mean_batch Training Loss: {mean_batch_train_loss:.8f}')  
         
-        mean_batch_val_loss, val_epoch_loss_list, mean_batch_eval_lossWOpenalty = evaluation(model, val_epoch_loss_list, criterion, val_loader, device,ESPF,Drug_SelfAttention, weighted_threshold, few_weight, more_weight, correlation='plotLossCurve') # input arg kfoldCV must be None (1)
+        mean_batch_val_loss, val_epoch_loss_list, mean_batch_eval_lossWOpenalty = evaluation(model, val_epoch_loss_list, criterion, val_loader, device,ESPF,Drug_SelfAttention, weighted_threshold, few_weight, more_weight, outputcontrol='plotLossCurve') # input arg kfoldCV must be None (1)
                                                
         if warmup_iters is not None:
             # print("lr of epoch", epoch + 1, "=>", lr_scheduler.get_lr()) 
@@ -235,5 +238,5 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
         gradient_fig = Grad_tracker.plot_gradient_norms()
     else:
         gradient_fig = None
-    
+        
     return best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list, best_val_epoch_train_loss,best_val_epoch_train_lossWOpenalty, best_epoch_AttenScorMat_DrugSelf,best_epoch_AttenScorMat_DrugCellSelf, gradient_fig, gradient_norms_list

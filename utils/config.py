@@ -2,9 +2,9 @@
 # python3 ./main_kfold.py --config utils/config.py
 import torch.nn as nn
 from utils.Loss import Custom_LossFunction,Custom_Weighted_LossFunction
-from utils.Custom_Activation_Function import ScaledSigmoid
+from utils.Custom_Activation_Function import ScaledSigmoid, ReLU_clamp
 
-test = True #False, True: batch_size = 3, num_epoch = 2, full dataset
+test = False #False, True: batch_size = 3, num_epoch = 2, full dataset
 
 omics_files = {
     'Mut': "../data/CCLE/CCLE_match_TCGAgene_PRISMandEXPsample_binary_mutation_476_6009.txt",
@@ -26,14 +26,14 @@ seed = 42
 #hyperparameter
 model_name = "Omics_DCSA_Model" # Omics_DrugESPF_Model  Omics_DCSA_Model
 AUCtransform = "-log2" #"-log2"
-splitType= 'byDrug' # byCCL byDrug
-kfoldCV = 2
+splitType= 'byCCL' # byCCL byDrug
+kfoldCV = 5
 include_omics = ['Exp']
 max_drug_len=50 # 不夠補零補到50 / 超過取前50個subwords(index) !!!!須改方法!!!! 
 drug_embedding_feature_size = 128
 ESPF = True # False True
-Drug_SelfAttention = True
-pos_emb_type = 'learned' # 'learned' 'sinusoidal'
+Drug_SelfAttention = False
+pos_emb_type = 'sinusoidal' # 'learned' 'sinusoidal'
 #需再修改-----------
 
 intermediate_size =512
@@ -53,16 +53,16 @@ elif ESPF is False:
 TrackGradient = False # False True
 
 activation_func = nn.ReLU()  # ReLU activation function # Leaky ReLu
-activation_func_final = ScaledSigmoid(scale=8) # GroundT range ( 0 ~ scale )
+activation_func_final = ScaledSigmoid(scale=8) # ScaledSigmoid(scale=8) GroundT range ( 0 ~ scale ) # ReLU_clamp(max=8)
 #nn.Sigmoid()or ReLU() or Linear/identity(when -log2AUC)
-batch_size = 100
+batch_size = 200
 num_epoch = 200 # for k fold CV 
 patience = 20
 warmup_iters = 60
 Decrease_percent = 0.9
 continuous = True
-learning_rate=1e-05
-criterion = Custom_LossFunction(loss_type="MSE", loss_lambda=1.0, regular_type=None, regular_lambda=1e-05) #nn.MSELoss()#
+learning_rate=5e-05
+criterion = Custom_LossFunction(loss_type="MSE", loss_lambda=1.0, regular_type=None, regular_lambda=1e-06) #nn.MSELoss()#
 """ A customizable loss function class.
     Args:
         loss_type (str): The type of loss to use ("RMSE", "MSE", "MAE", "MAE+MSE", "MAE+RMSE")/("weighted_RMSE", "weighted_MSE", "weighted_MAE", "weighted_MAE+MSE", "weighted_MAE+RMSE").
@@ -77,7 +77,7 @@ __translation_table__ = str.maketrans({
     "'": "",    "\"": "",    "[": "",    "]": "",
     ",": "" })
 
-hyperparameter_folder_part = (f'Model{model_name}_{splitType}_Omics{[omic_type for omic_type in include_omics]}_ESPF{ESPF}_Tranformer{Drug_SelfAttention}').translate(__translation_table__)
+hyperparameter_folder_part = (f'Model{model_name}_{splitType}_Omics{[omic_type for omic_type in include_omics]}_ESPF{ESPF}_DrugSelfAttention{Drug_SelfAttention}').translate(__translation_table__)
 
 
 
