@@ -408,24 +408,30 @@ class Omics_DrugESPF_Model(nn.Module):
 
             self.MLP4ESPF = nn.Sequential(
                 nn.Linear(max_drug_len * hidden_size, drug_encode_dims[0]),
+                nn.BatchNorm1d(drug_encode_dims[0]),
                 activation_func,
                 nn.Dropout(hidden_dropout_prob),
                 nn.Linear(drug_encode_dims[0], drug_encode_dims[1]),
+                nn.BatchNorm1d(drug_encode_dims[1]),
                 activation_func,
                 nn.Dropout(hidden_dropout_prob),
                 nn.Linear(drug_encode_dims[1], drug_encode_dims[2]),
+                nn.BatchNorm1d(drug_encode_dims[2]),
                 activation_func)
             # Initialize weights with Kaiming uniform initialization, bias with aero
             self._init_weights(self.MLP4ESPF)
         else: # MACCS166
             self.MLP4MACCS = nn.Sequential( # 166->[110,55,22]
                 nn.Linear(166, drug_encode_dims[0]),
+                nn.BatchNorm1d(drug_encode_dims[0]),
                 activation_func,
                 # nn.Dropout(hidden_dropout_prob),
                 nn.Linear(drug_encode_dims[0], drug_encode_dims[1]),
+                nn.BatchNorm1d(drug_encode_dims[1]),
                 activation_func,
                 # nn.Dropout(hidden_dropout_prob),
                 nn.Linear(drug_encode_dims[1], drug_encode_dims[2]),
+                nn.BatchNorm1d(drug_encode_dims[2]),
                 activation_func)
             # Initialize weights with Kaiming uniform initialization, bias with aero
             self._init_weights(self.MLP4MACCS)
@@ -509,8 +515,9 @@ class Omics_DrugESPF_Model(nn.Module):
         
         # Concatenate embeddings from all subnetworks
         combined_mut_drug_embed = torch.cat([omic_embeddings, drug_final_emb], dim=1)#dim=1: turn into 1D
-        output = self.model_final_add(combined_mut_drug_embed)
-        return output, self.attention_probs
+        output_before_final_activation = self.model_final_add[:-1](combined_mut_drug_embed)
+        output = self.model_final_add[-1](output_before_final_activation)
+        return output, self.attention_probs,'',output_before_final_activation
     
 
 
@@ -576,18 +583,19 @@ class Omics_DCSA_Model(nn.Module):
         dense_layer_dim=7064
         self.model_final_add = nn.Sequential(
             nn.Linear(7064, 700),
+            nn.BatchNorm1d(700), 
             activation_func,
-            nn.Dropout(p=0),
+            nn.Dropout(p=0.1),
             nn.Linear(700, 70),
+            nn.BatchNorm1d(70), 
             activation_func,
-            nn.Dropout(p=0),
+            nn.Dropout(p=0.1),
             nn.Linear(70, 1),
             activation_func_final)
         # Initialize weights with Kaiming uniform initialization, bias with aero
         self._init_weights(self.model_final_add)
 
         self.print_flag = True
-        self.attention_probs = None # store Attention score matrix
     
     def _init_weights(self, model):
         if isinstance(model, nn.Linear):  # 直接初始化 nn.Linear 層
@@ -682,6 +690,6 @@ class Omics_DCSA_Model(nn.Module):
     
     # Final MLP
         output_before_final_activation = self.model_final_add[:-1](append_embeddings)
-        output = self.model_final_add(append_embeddings)
+        output = self.model_final_add[-1](output_before_final_activation)
 
         return output, AttenScorMat_DrugSelf, AttenScorMat_DrugCellSelf,output_before_final_activation

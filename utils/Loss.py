@@ -5,6 +5,59 @@ import torch
 import torch.nn as nn
 
 # Example usage:
+# criterion = FocalHuberLoss(delta=0.5, alpha=1.0, gamma=2.0, regular_type=None, regular_lambda=1e-05)
+class FocalHuberLoss(nn.Module):
+    def __init__(self, delta=0.2, alpha=1.0, gamma=2.0, regular_type=None, regular_lambda=1e-05):
+        """
+        Focal Huber Loss for regression.
+
+        Args:
+        - delta: Huber threshold.
+        - alpha: Controls how fast weight decays for easy samples.
+        - gamma: Controls focus on hard samples.
+        """
+        super(FocalHuberLoss, self).__init__()
+        self.delta = delta
+        self.alpha = alpha
+        self.gamma = gamma
+        self.regular_type = regular_type
+        self.regular_lambda = regular_lambda
+        self.penalty_value = None
+        self.loss_type="FocalHuberLoss"
+
+    def forward(self, y_pred, y_true, model=None, weights=None):
+        error = torch.abs(y_true - y_pred)
+        weight = (1 - torch.exp(-self.alpha * error)) ** self.gamma  # Focal weighting
+
+        # Huber loss: quadratic for small errors, linear for large errors
+        quadratic = 0.5 * (error ** 2)
+        linear = self.delta * (error - 0.5 * self.delta)
+        huber_loss = torch.where(error < self.delta, quadratic, linear)
+        self.loss = (weight * huber_loss).mean()
+
+        loss_with_penalty=None
+        # Add regularization penalty if specified
+        if self.regular_type and model:
+            if self.regular_type == "L1":
+                reg_penalty = sum(p.abs().sum() for p in model.parameters())
+            elif self.regular_type == "L2":
+                reg_penalty = sum(p.pow(2).sum() for p in model.parameters())
+            elif self.regular_type == "L1+L2":
+                reg_penalty = sum(p.abs().sum() + p.pow(2).sum() for p in model.parameters())
+            else:
+                raise ValueError(f"Unsupported regularization type: {self.regular_type}")
+            loss_with_penalty = self.loss + self.regular_lambda * reg_penalty
+            self.penalty_value = self.regular_lambda * reg_penalty
+            return loss_with_penalty
+        
+        return self.loss
+    def __repr__(self):
+        return (f"FocalHuberLoss(delta={self.delta},alpha={self.alpha},gamma={self.gamma}),"
+                f"regular_type={self.regular_type}, "
+                f"regular_lambda={self.regular_lambda}"
+                f"penalty_value={self.penalty_value}\n") 
+
+# Example usage:
 # criterion = Custom_LossFunction(loss_type="RMSE", loss_lambda=1.0, regular_type=None, regular_lambda=1e-05)
 class Custom_Weighted_LossFunction(nn.Module):
     def __init__(self, loss_type="weighted_RMSE", loss_lambda=1.0, regular_type=None, regular_lambda=1e-05):
@@ -55,6 +108,7 @@ class Custom_Weighted_LossFunction(nn.Module):
         # Aggregate loss (mean over batch)
         self.loss = batch_sample_loss.mean()
 
+        loss_with_penalty= None
         # Add regularization penalty if specified
         if self.regular_type and model:
             if self.regular_type == "L1":
@@ -67,8 +121,8 @@ class Custom_Weighted_LossFunction(nn.Module):
                 raise ValueError(f"Unsupported regularization type: {self.regular_type}")
             loss_with_penalty = self.loss + self.regular_lambda * reg_penalty
             self.penalty_value = self.regular_lambda * reg_penalty
-
-        return loss_with_penalty
+            return loss_with_penalty
+        return self.loss
 
     def __repr__(self):
         return (f"Custom_Weighted_LossFunction(loss_type={self.loss_type}, "
@@ -125,7 +179,8 @@ class Custom_LossFunction(nn.Module):
             self.loss = mae + self.loss_lambda * torch.sqrt(mse)
         else:
             raise ValueError(f"Unsupported loss type: {self.loss_type}")
-
+        
+        loss_with_penalty= None
         # Add regularization penalty if specified
         if self.regular_type and model:
             if self.regular_type == "L1":

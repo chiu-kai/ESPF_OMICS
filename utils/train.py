@@ -107,6 +107,7 @@ def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,D
             #     outputs = outputs*valueMultiply
             eval_outputs.append(outputs.detach().cpu().numpy().reshape(-1)) #dtype = 'float32'
             eval_targets.append(target.detach().cpu().numpy().reshape(-1))
+
             if outputcontrol != 'plotLossCurve':
                 eval_outputs_before_final_activation_list.append((model_output[3])[mask].detach().cpu().numpy().reshape(-1))
             if target.numel() != 0: # check if a batch do not has [] empty list 
@@ -175,7 +176,6 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
             
             model_output = model(omics_tensor_dict, drug, device,**{"ESPF":ESPF,"Drug_SelfAttention":Drug_SelfAttention}) #drug.to(torch.float32)
             outputs =model_output[0]
-            
             # attention_score_matrix torch.Size([bsz, 8, 50, 50])# softmax(without dropout)
             mask = ~torch.isnan(target)# Create a mask for non-NaN values in tensor # 0:nan, 1:non-nan
 
@@ -199,6 +199,7 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
                     gradient_norms_list = Grad_tracker.check_and_log(model)  # Check and log gradient norms
                 else:
                     gradient_norms_list = None
+                #torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0) # Apply gradient clipping
                 optimizer.step()  # Update weights
                 total_train_loss += (loss.cpu().detach().numpy()) #/ (valueMultiply**2 if isinstance(criterion, nn.MSELoss) else (valueMultiply if isinstance(criterion, nn.L1Loss) else 1))
                 total_train_lossWOpenalty += (lossWOpenalty.cpu().detach().numpy())

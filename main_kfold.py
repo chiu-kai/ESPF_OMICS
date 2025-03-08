@@ -56,13 +56,14 @@ for omic_type in include_omics:
 
     if test is True:
         # Specify the index as needed
-        omics_data_dict[omic_type] = omics_data_dict[omic_type][:76]  # Adjust the row selection as needed
+        omics_data_dict[omic_type] = omics_data_dict[omic_type][:76]  # Adjust the row selection as needed  
     if omic_type == "Exp":# apply Column-wise Min-Max Normalization 
         scaler = MinMaxScaler() 
-        omics_data_dict[omic_type] = pd.DataFrame(scaler.fit_transform(omics_data_dict[omic_type]))
+        omics_data_dict[omic_type] = pd.DataFrame(scaler.fit_transform(omics_data_dict[omic_type]),index=omics_data_dict[omic_type].index,columns=omics_data_dict[omic_type].columns)
 
     omics_data_tensor_dict[omic_type]  = torch.tensor(omics_data_dict[omic_type].values, dtype=torch.float32).to(device)
     omics_numfeatures_dict[omic_type] = omics_data_tensor_dict[omic_type].shape[1]
+ 
     print(f"{omic_type} tensor shape:", omics_data_tensor_dict[omic_type].shape)
     print(f"{omic_type} num_features",omics_numfeatures_dict[omic_type])
 
@@ -93,14 +94,15 @@ if test is True:
     kfoldCV = 2
     print("kfoldCV",kfoldCV)
 
+
 if 'weighted' in criterion.loss_type :    
     # Set threshold based on the 90th percentile # 將高於threshold的AUC權重增加
     weighted_threshold = np.nanpercentile(AUC_df.values, 90)    
     total_samples = (~np.isnan(AUC_df.values)).sum().item()
-    few_samples = (AUC_df.values > weighted_threshold).sum().item()
-    more_samples = total_samples - few_samples
-    few_weight = total_samples / (2 * few_samples)  
-    more_weight = total_samples / (2 * more_samples)   
+    fewWt_samples = (AUC_df.values > weighted_threshold).sum().item()
+    moreWt_samples = total_samples - fewWt_samples
+    few_weight = total_samples / (2 * fewWt_samples)  
+    more_weight = total_samples / (2 * moreWt_samples)   
     # print("weighted_threshold",weighted_threshold)
     # print("total_samples",total_samples)
     # print("few_samples",few_samples)
@@ -164,7 +166,7 @@ if splitType == "byCCL":
 elif splitType == "byDrug":
     repeatNum = num_ccl
 id_test = repeat_func(id_unrepeat_test, repeatNum, setname='test')   
-
+print(id_test[:10])
 
 #create dataset
 set_seed(seed)
@@ -433,7 +435,7 @@ with open(output_file, "w") as file:
                                     ("Validation", val_spearman),
                                     ("Test", test_spearman)]:
         file.write(f"Mean Median Mode {name} Spearman {model_name}:\t{np.mean(spearman):.6f} ± {np.std(spearman):.4f}\t{stats.skew(spearman, bias=False, nan_policy='raise'):.6f}\t {np.median(spearman):.6f}\t{stats.mode(np.round(spearman,2))}\n")
-        
+    
     file.write(f"test_targets\n{test_targets[0][:10]}\n")
     file.write(f"test_outputs_before_final_activation_list\n{test_outputs_before_final_activation_list[0][:10]}\n")
     file.write(f"test_outputs\n{test_outputs[0][:10]}\n")
