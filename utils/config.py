@@ -24,10 +24,10 @@ TCGA_pretrain_weight_path_dict = {'Mut': "./results/Encoder_tcga_mut_1000_100_50
                                 }
 seed = 42
 #hyperparameter
-model_name = "Omics_DCSA_Model" # Omics_DrugESPF_Model  Omics_DCSA_Model
+model_name = "Omics_DrugESPF_Model" # Omics_DrugESPF_Model  Omics_DCSA_Model
 AUCtransform = None #"-log2"
 splitType= 'byCCL' # byCCL byDrug
-kfoldCV = 2
+kfoldCV = 5
 include_omics = ['Exp']
 max_drug_len=50 # 不夠補零補到50 / 超過取前50個subwords(index) !!!!須改方法!!!! 
 drug_embedding_feature_size = 128

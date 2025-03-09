@@ -4,8 +4,82 @@ import torch.nn as nn
 import torch
 import torch.nn as nn
 
+class FocalMSELoss(nn.Module):
+    def __init__(self, alpha=8.0, gamma=1.0, regular_type=None, regular_lambda=1e-05):
+        super(FocalMSELoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.regular_type = regular_type
+        self.regular_lambda = regular_lambda
+        self.penalty_value = None
+        self.loss_type="FocalMSELoss"
+
+    def forward(self, y_pred, y_true, model=None, weights=None):
+        error = torch.abs(y_true - y_pred)
+        weight = (1 - torch.exp(-self.alpha * error)) ** self.gamma  # Weight function
+        self.loss = (weight * (error ** 2)).mean()  # Weighted MSE
+        
+        loss_with_penalty= None
+        # Add regularization penalty if specified
+        if self.regular_type and model:
+            if self.regular_type == "L1":
+                reg_penalty = sum(p.abs().sum() for p in model.parameters())
+            elif self.regular_type == "L2":
+                reg_penalty = sum(p.pow(2).sum() for p in model.parameters())
+            elif self.regular_type == "L1+L2":
+                reg_penalty = sum(p.abs().sum() + p.pow(2).sum() for p in model.parameters())
+            else:
+                raise ValueError(f"Unsupported regularization type: {self.regular_type}")
+            loss_with_penalty = self.loss + self.regular_lambda * reg_penalty
+            self.penalty_value = self.regular_lambda * reg_penalty
+            return loss_with_penalty
+        return self.loss
+
+    def __repr__(self):
+        return (f"FocalMSELoss(alpha={self.alpha},gamma={self.gamma}),"
+                f"regular_type={self.regular_type}, "
+                f"regular_lambda={self.regular_lambda})"
+                f"penalty_value={self.penalty_value}\n")
+    
+class FocalMAELoss(nn.Module):
+    def __init__(self, alpha=8.0, gamma=1.0, regular_type=None, regular_lambda=1e-05):
+        super(FocalMAELoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.regular_type = regular_type
+        self.regular_lambda = regular_lambda
+        self.penalty_value = None
+        self.loss_type="FocalMAELoss"
+
+    def forward(self, y_pred, y_true, model=None, weights=None):
+        error = torch.abs(y_true - y_pred)
+        weight = (1 - torch.exp(-self.alpha * error)) ** self.gamma  # Weight function
+        self.loss = (weight * error).mean()  # Weighted MAE
+        
+        loss_with_penalty= None
+        # Add regularization penalty if specified
+        if self.regular_type and model:
+            if self.regular_type == "L1":
+                reg_penalty = sum(p.abs().sum() for p in model.parameters())
+            elif self.regular_type == "L2":
+                reg_penalty = sum(p.pow(2).sum() for p in model.parameters())
+            elif self.regular_type == "L1+L2":
+                reg_penalty = sum(p.abs().sum() + p.pow(2).sum() for p in model.parameters())
+            else:
+                raise ValueError(f"Unsupported regularization type: {self.regular_type}")
+            loss_with_penalty = self.loss + self.regular_lambda * reg_penalty
+            self.penalty_value = self.regular_lambda * reg_penalty
+            return loss_with_penalty
+        return self.loss
+
+    def __repr__(self):
+        return (f"FocalMAELoss(alpha={self.alpha},gamma={self.gamma}),"
+                f"regular_type={self.regular_type}, "
+                f"regular_lambda={self.regular_lambda})"
+                f"penalty_value={self.penalty_value}\n")
+
 # Example usage:
-# criterion = FocalHuberLoss(delta=0.5, alpha=1.0, gamma=2.0, regular_type=None, regular_lambda=1e-05)
+# criterion = FocalHuberLoss(delta=0.2, alpha=0.3, gamma=2.0, regular_type=None, regular_lambda=1e-05)
 class FocalHuberLoss(nn.Module):
     def __init__(self, delta=0.2, alpha=1.0, gamma=2.0, regular_type=None, regular_lambda=1e-05):
         """
