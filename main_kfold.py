@@ -236,7 +236,7 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     model.load_state_dict(best_weight)  
     model.to(device=device)
     
-    _,_,_,_,test_lossWOpenalty,_ = evaluation(model, None, criterion, test_loader, device,ESPF, Drug_SelfAttention,weighted_threshold, few_weight, more_weight, outputcontrol='correlation')
+    _,_,_,test_lossWOpenalty,_ = evaluation(model, None, criterion, test_loader, device,ESPF, Drug_SelfAttention,weighted_threshold, few_weight, more_weight, outputcontrol='correlation')
 
     kfold_losses[fold]['test'] = test_lossWOpenalty
     # save best fold testing loss model weight
@@ -325,17 +325,17 @@ print("Number of parameter: %.2fK" % (num_param/1e3))
 # Evaluation on the train set
 model.load_state_dict(best_fold_best_weight)  
 model.to(device=device)
-_, train_targets, train_outputs, _, train_lossWOpenalty,_ = evaluation(model, val_epoch_loss_list, criterion, train_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, outputcontrol='correlation')
+_, train_targets, train_outputs, train_lossWOpenalty,_ = evaluation(model, val_epoch_loss_list, criterion, train_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, outputcontrol='correlation')
 # Compute and print all metrics
 metrics_calculator = MetricsCalculator()
 train_metrics= metrics_calculator.compute_all_metrics(np.concatenate(train_targets), np.concatenate(train_outputs),set_name='train_set')
 # metrics_calculator.print_results(set_name='train_set')
 # Evaluation on the validation set
-_, val_targets, val_outputs, _ , val_lossWOpenalty,_ = evaluation(model, val_epoch_loss_list, criterion, val_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, outputcontrol='correlation')
+_, val_targets, val_outputs, val_lossWOpenalty,_ = evaluation(model, val_epoch_loss_list, criterion, val_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, outputcontrol='correlation')
 val_metrics= metrics_calculator.compute_all_metrics(np.concatenate(val_targets), np.concatenate(val_outputs),set_name='val_set')
 # metrics_calculator.print_results(set_name='val_set')
 # Evaluation on the test set
-_, test_targets, test_outputs, _ , test_lossWOpenalty,test_outputs_before_final_activation_list = evaluation(model, val_epoch_loss_list, criterion, test_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, outputcontrol='correlation')
+_, test_targets, test_outputs, test_lossWOpenalty,test_outputs_before_final_activation_list = evaluation(model, val_epoch_loss_list, criterion, test_loader, device,ESPF, Drug_SelfAttention, weighted_threshold, few_weight, more_weight, outputcontrol='correlation')
 test_metrics= metrics_calculator.compute_all_metrics(np.concatenate(test_targets), np.concatenate(test_outputs),set_name='test_set')
 # metrics_calculator.print_results(set_name='test_set')
 
@@ -406,6 +406,14 @@ with open(output_file, "w") as file:
                 file.write(f"Metrics {name} {key} : {value:.6f}\n")
 
 # Pearson and Spearman statistics
+    # <=0的都=0
+    train_pearson = np.maximum( 0, np.array(train_pearson) )
+    val_pearson = np.maximum( 0, np.array(val_pearson) )
+    test_pearson = np.maximum( 0, np.array(test_pearson) )
+    train_spearman = np.maximum( 0, np.array(train_spearman) )
+    val_spearman = np.maximum( 0, np.array(val_spearman) )
+    test_spearman = np.maximum( 0, np.array(test_spearman) )
+
     for name, pearson in [("Train", train_pearson),
                                     ("Validation", val_pearson),
                                     ("Test", test_pearson)]:

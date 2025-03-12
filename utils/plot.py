@@ -95,7 +95,6 @@ def correlation_density(model_name,train_pearson,val_pearson,test_pearson,train_
     # Create a density plot using seaborn's kdeplot function
     fig=plt.figure(figsize=(14, 5))
     # Set the title of the plot
-    
     plt.subplot(1,2,1)
     sns.kdeplot(train_pearson, fill=True, color='blue', label='Train',linewidth=1.5)
     sns.kdeplot(val_pearson, fill=True, color='red', label='Validation',linewidth=1.5)

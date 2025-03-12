@@ -41,9 +41,9 @@ def correlation_func(splitType, data_AUC_matrix,ccl_names_AUC,drug_names_AUC,id_
         else:
             if len(GTvalues)>=2: # pearsonr和spearmanr需要2個值以上，但是test=True時，drug-cell pair可能只有一個或零個
                 correlation_coef, p_value = pearsonr(predvalues, GTvalues)
-                correlation_coef=abs(correlation_coef)
+                # correlation_coef=abs(correlation_coef)
                 spearman_correlation_coef, p_value = spearmanr(predvalues, GTvalues)
-                spearman_correlation_coef = abs(spearman_correlation_coef)
+                # spearman_correlation_coef = abs(spearman_correlation_coef)
                 if splitType == 'byCCL':
                     pearson.append(correlation_coef)
                     spearman.append(spearman_correlation_coef)     

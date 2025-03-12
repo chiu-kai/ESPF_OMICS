@@ -87,6 +87,7 @@ def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,D
     eval_outputs = [] # for correlation
     eval_targets = [] # for correlation
     eval_outputs_before_final_activation_list = []
+    predAUCwithUnknownGT = []
     model.eval()
     model.requires_grad = False
     total_eval_loss = np.float32(0.0)
@@ -101,7 +102,7 @@ def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,D
             mask = ~torch.isnan(target)# Create a mask for non-NaN values in tensor # 去除nan的項 # mask.shape(n_sample, 1)
             target = target[mask]# Apply the mask to filter out NaN values from both tensors # target.shape(n_sample, 1)->(n_sample-nan, 1)
             
-            predAUCwithUnknownGT = outputs # for unknown GroundTruth
+            predAUCwithUnknownGT.append(outputs.detach().cpu().numpy().reshape(-1))# for unknown GroundTruth
             outputs = outputs[mask] #dtype = 'float32'
             # if isinstance(activation_func_final, nn.Sigmoid): # if ReLU(), no need
             #     outputs = outputs*valueMultiply
@@ -137,10 +138,11 @@ def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,D
         # for inference after train epoch loop, and store output for correlation
         elif outputcontrol == 'correlation':
             # print(f'Evaluation {outputcontrol} Loss: {mean_batch_eval_loss:.8f}')
-            return mean_batch_eval_loss, eval_targets, eval_outputs, predAUCwithUnknownGT,mean_batch_eval_lossWOpenalty,eval_outputs_before_final_activation_list
+            return mean_batch_eval_loss, eval_targets, eval_outputs,mean_batch_eval_lossWOpenalty,eval_outputs_before_final_activation_list
         elif outputcontrol =='inference':
+            AttenScorMat_DrugSelf = model_output[1]
             AttenScorMat_DrugCellSelf = model_output[2]
-            return eval_targets, eval_outputs,predAUCwithUnknownGT, AttenScorMat_DrugCellSelf,eval_outputs_before_final_activation_list
+            return eval_targets, eval_outputs,predAUCwithUnknownGT, AttenScorMat_DrugSelf,AttenScorMat_DrugCellSelf,eval_outputs_before_final_activation_list, mean_batch_eval_lossWOpenalty
         else:
             print('error occur when outputcontrol argument is not correct')
             return 'error occur when outputcontrol argument is not correct'

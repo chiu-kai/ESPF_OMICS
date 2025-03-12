@@ -1,10 +1,10 @@
 # pip install subword-nmt seaborn lifelines openpyxl matplotlib scikit-learn openTSNE
 # python3 ./main_kfold.py --config utils/config.py
 import torch.nn as nn
-from utils.Loss import Custom_LossFunction,Custom_Weighted_LossFunction,FocalHuberLoss
+from utils.Loss import Custom_LossFunction,Custom_Weighted_LossFunction,FocalMSELoss
 from utils.Custom_Activation_Function import ScaledSigmoid, ReLU_clamp
 
-test = False #False, True: batch_size = 3, num_epoch = 2, full dataset
+test = True #False, True: batch_size = 3, num_epoch = 2, full dataset
 
 omics_files = {
     'Mut': "../data/CCLE/CCLE_match_TCGAgene_PRISMandEXPsample_binary_mutation_476_6009.txt",
@@ -24,15 +24,15 @@ TCGA_pretrain_weight_path_dict = {'Mut': "./results/Encoder_tcga_mut_1000_100_50
                                 }
 seed = 42
 #hyperparameter
-model_name = "Omics_DrugESPF_Model" # Omics_DrugESPF_Model  Omics_DCSA_Model
+model_name = "Omics_DCSA_Model" # Omics_DrugESPF_Model  Omics_DCSA_Model
 AUCtransform = None #"-log2"
 splitType= 'byCCL' # byCCL byDrug
-kfoldCV = 5
+kfoldCV = 2
 include_omics = ['Exp']
 max_drug_len=50 # 不夠補零補到50 / 超過取前50個subwords(index) !!!!須改方法!!!! 
 drug_embedding_feature_size = 128
 ESPF = True # False True
-Drug_SelfAttention = False
+Drug_SelfAttention = True
 pos_emb_type = 'sinusoidal' # 'learned' 'sinusoidal'
 #需再修改-----------
 
@@ -63,7 +63,7 @@ Decrease_percent = 0.9
 continuous = True
 learning_rate=1e-04
 #criterion = Custom_LossFunction(loss_type="MSE", loss_lambda=1.0, regular_type=None, regular_lambda=1e-06) #nn.MSELoss()#
-criterion =  FocalHuberLoss(delta=0.5, alpha=1.0, gamma=2.0, regular_type=None, regular_lambda=1e-05)
+criterion =  FocalMSELoss(alpha=8.0, gamma=1.0, regular_type=None, regular_lambda=1e-05)
 """ A customizable loss function class.
     Args:
         loss_type (str): The type of loss to use ("RMSE", "MSE", "MAE", "MAE+MSE", "MAE+RMSE")/("weighted_RMSE", "weighted_MSE", "weighted_MAE", "weighted_MAE+MSE", "weighted_MAE+RMSE").
