@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import os
 import time 
 
+
 class GradientNormTracker:
     def __init__(self, batch_size,check_frequency=10, enable_plot=True):
         """
@@ -82,20 +83,23 @@ def log_gradient_norms(model):
     print(f"Total Gradient Norm: {total_norm:.4f}")
     return total_norm
 
-def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,Drug_SelfAttention, weighted_threshold, few_weight, more_weight, outputcontrol='' ):
+def evaluation(model, eval_epoch_loss_W_penalty_ls, eval_epoch_loss_WO_penalty_ls, 
+               criterion, eval_loader, device,ESPF,Drug_SelfAttention, 
+               weighted_threshold, few_weight, more_weight, 
+               outputcontrol='' ):
+    
     torch.manual_seed(42)
     eval_outputs = [] # for correlation
     eval_targets = [] # for correlation
     eval_outputs_before_final_activation_list = []
     predAUCwithUnknownGT = []
+    mean_batch_eval_loss_W_penalty = None #np.float32(0.0)
+    mean_batch_eval_loss_WO_penalty= None #np.float32(0.0)
     model.eval()
     model.requires_grad = False
-    total_eval_loss = np.float32(0.0)
-    total_eval_lossWOpenalty = np.float32(0.0)
-    batch_idx_without_nan_count=0 # if a batch has [] empty list than don't count
     weight_loss_mask = None
     with torch.no_grad():
-        for batch_idx,inputs in enumerate(eval_loader):
+        for inputs in eval_loader:
             omics_tensor_dict,drug, target = inputs[0],inputs[1], inputs[-1]#.to(device=device)
             model_output = model(omics_tensor_dict, drug, device, **{"ESPF":ESPF,"Drug_SelfAttention":Drug_SelfAttention}) #drug.to(torch.float32)
             outputs = model_output[0]  # model_output[1] # model_output[2] # output.shape(n_sample, 1)
@@ -104,71 +108,67 @@ def evaluation(model, val_epoch_loss_list, criterion, eval_loader, device,ESPF,D
             
             predAUCwithUnknownGT.append(outputs.detach().cpu().numpy().reshape(-1))# for unknown GroundTruth
             outputs = outputs[mask] #dtype = 'float32'
-            # if isinstance(activation_func_final, nn.Sigmoid): # if ReLU(), no need
-            #     outputs = outputs*valueMultiply
-            eval_outputs.append(outputs.detach().cpu().numpy().reshape(-1)) #dtype = 'float32'
-            eval_targets.append(target.detach().cpu().numpy().reshape(-1))
 
+            eval_outputs.append(outputs.detach().reshape(-1)) #dtype = 'float32' # [tensor]
+            eval_targets.append(target.detach().reshape(-1)) # [tensor]
             if outputcontrol != 'plotLossCurve':
                 eval_outputs_before_final_activation_list.append((model_output[3])[mask].detach().cpu().numpy().reshape(-1))
-            if target.numel() != 0: # check if a batch do not has [] empty list 
-                batch_idx_without_nan_count+=1
-                # if isinstance(criterion, (nn.MSELoss, nn.L1Loss)):
-                #     batch_val_loss = criterion(outputs.reshape(-1), target.to(torch.float32).reshape(-1))
-                #     assert batch_val_loss.requires_grad == False  # Ensure no gradients are computed
-                #     total_eval_loss += (batch_val_loss.cpu().detach().numpy())/ (valueMultiply**2 if isinstance(criterion, nn.MSELoss) else valueMultiply)
-                # else:  # Custom_LossFunction
-                if weighted_threshold is not None:
-                    weight_loss_mask = torch.where(target > weighted_threshold, few_weight, more_weight)# Returns few_weight where condition is True.
-                batch_val_loss = criterion(outputs.reshape(-1), target.to(torch.float32).reshape(-1), model, weight_loss_mask)
-                # assert batch_val_loss.requires_grad == False  # Ensure no gradients are computed
-                total_eval_loss += (batch_val_loss.cpu().detach().numpy())
-                total_eval_lossWOpenalty += ((criterion.loss).cpu().detach().numpy())#lossWOpenalty
-                    
-        if batch_idx_without_nan_count > 0:
-            mean_batch_eval_loss = (total_eval_loss/(batch_idx_without_nan_count)).astype('float32') # batches' average loss as one epoch's loss
-            mean_batch_eval_lossWOpenalty = (total_eval_lossWOpenalty/(batch_idx_without_nan_count)).astype('float32')
+
+        if weighted_threshold is not None:
+            weight_loss_mask = torch.where(torch.cat(eval_targets) > weighted_threshold, few_weight, more_weight)# Returns few_weight where condition is True.
+        
+        mean_batch_eval_loss_W_penalty = criterion(torch.cat(eval_outputs),torch.cat(eval_targets), model, weight_loss_mask)# with weighted loss # without batch effect the loss
+        mean_batch_eval_loss_WO_penalty = criterion.loss_WO_penalty.cpu().detach().numpy()
 
         # just for evaluation in train epoch loop , and plot the epochs loss, not for correlation
         if outputcontrol =='plotLossCurve': 
             # print(f'Epoch [{epoch + 1}/{num_epoch}] - mean_batch Validation Loss: {mean_batch_eval_loss:.8f}')
-            # val_epoch_loss_list.append(mean_batch_eval_loss)
-            val_epoch_loss_list.append(mean_batch_eval_lossWOpenalty)
-            return mean_batch_eval_loss, val_epoch_loss_list,mean_batch_eval_lossWOpenalty
+            eval_epoch_loss_W_penalty_ls.append(mean_batch_eval_loss_W_penalty.cpu().detach().numpy() )# 
+            eval_epoch_loss_WO_penalty_ls.append(mean_batch_eval_loss_WO_penalty )
+            return (eval_targets, eval_outputs,
+                    eval_epoch_loss_W_penalty_ls,  eval_epoch_loss_WO_penalty_ls,  
+                    mean_batch_eval_loss_WO_penalty)
         # for inference after train epoch loop, and store output for correlation
         elif outputcontrol == 'correlation':
             # print(f'Evaluation {outputcontrol} Loss: {mean_batch_eval_loss:.8f}')
-            return mean_batch_eval_loss, eval_targets, eval_outputs,mean_batch_eval_lossWOpenalty,eval_outputs_before_final_activation_list
+            return (eval_targets, eval_outputs,mean_batch_eval_loss_WO_penalty,
+                    eval_outputs_before_final_activation_list)
         elif outputcontrol =='inference':
             AttenScorMat_DrugSelf = model_output[1]
             AttenScorMat_DrugCellSelf = model_output[2]
-            return eval_targets, eval_outputs,predAUCwithUnknownGT, AttenScorMat_DrugSelf,AttenScorMat_DrugCellSelf,eval_outputs_before_final_activation_list, mean_batch_eval_lossWOpenalty
+            return (eval_targets, eval_outputs,predAUCwithUnknownGT, 
+                    AttenScorMat_DrugSelf,AttenScorMat_DrugCellSelf,
+                    eval_outputs_before_final_activation_list, mean_batch_eval_loss_WO_penalty)
         else:
             print('error occur when outputcontrol argument is not correct')
             return 'error occur when outputcontrol argument is not correct'
 
 
 
-
-def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrease_percent, continuous, learning_rate, criterion, train_loader, val_loader, device,ESPF,Drug_SelfAttention,seed, kfoldCV,weighted_threshold, few_weight, more_weight, TrackGradient=False):
+def train(model, optimizer, batch_size, num_epoch,patience, 
+          warmup_iters, Decrease_percent, continuous, 
+          criterion, train_loader, val_loader, device,
+          ESPF,Drug_SelfAttention,seed,
+          weighted_threshold, few_weight, more_weight, TrackGradient=False):
+    
     # Training with early stopping (assuming you've defined the EarlyStopping logic)
     if warmup_iters is not None:
         lr_scheduler = warmup_lr_scheduler(optimizer, warmup_iters, Decrease_percent,continuous)
-    best_val_loss = float('inf')
-    best_val_epoch_train_loss = None
-    best_weight=None
-    counter = 0
-    train_epoch_loss_list = []#  for train every epoch loss plot
-    val_epoch_loss_list=[]#  for validation every epoch loss plot
     if TrackGradient is True:
         Grad_tracker = GradientNormTracker(batch_size,check_frequency=10, enable_plot=True)  # Enable or disable plotting
 
+    BE_val_loss_WO_penalty = float('inf')
+    BE_val_train_loss_WO_penalty = None
+    best_weight=None
+    counter = 0
+    val_epoch_loss_W_penalty_ls = []
+    val_epoch_loss_WO_penalty_ls = [] # for validation every epoch loss plot
+    train_epoch_loss_W_penalty_ls = []
+    train_epoch_loss_WO_penalty_ls = []
     torch.manual_seed(seed)
     model.train()
     model.requires_grad = True
     for epoch in range(num_epoch):
-        total_train_loss = np.float32(0.0)
-        total_train_lossWOpenalty = np.float32(0.0)
         batch_idx_without_nan_count=0 # if a batch has [] empty list than don't count
         weight_loss_mask = None
         for batch_idx,inputs in enumerate(train_loader):
@@ -180,21 +180,14 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
             outputs =model_output[0]
             # attention_score_matrix torch.Size([bsz, 8, 50, 50])# softmax(without dropout)
             mask = ~torch.isnan(target)# Create a mask for non-NaN values in tensor # 0:nan, 1:non-nan
-
             target = target[mask]# Apply the mask to filter out NaN values from both tensors # 去除nan的項 [nan, 0.7908]->[0.7908]
             outputs = outputs[mask]
-            # if isinstance(activation_func_final, nn.Sigmoid): # ReLU就不用， Sigmoid要因為只有0~1 所以要跟著targetAUC一起變大
-            #     outputs = outputs*valueMultiply
-                
+
             if target.numel() != 0: # 確保batch中target去除掉nan後還有數值 (count)
                 batch_idx_without_nan_count+=1# if 這個batch有數值batch才累加 
-                # if isinstance(criterion, (nn.MSELoss, nn.L1Loss)):
-                #     loss = criterion(outputs.reshape(-1), target.to(torch.float32).reshape(-1))
-                # else:  # Custom_LossFunction
                 if weighted_threshold is not None:
                     weight_loss_mask = torch.where(target > weighted_threshold, few_weight, more_weight)
                 loss = criterion(outputs.reshape(-1), target.to(torch.float32).reshape(-1), model, weight_loss_mask)
-                lossWOpenalty = criterion.loss
                 # assert loss.requires_grad == True  # Ensure gradients are being computed
                 loss.backward()  # Compute gradients
                 if TrackGradient is True:
@@ -203,35 +196,42 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
                     gradient_norms_list = None
                 #torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0) # Apply gradient clipping
                 optimizer.step()  # Update weights
-                total_train_loss += (loss.cpu().detach().numpy()) #/ (valueMultiply**2 if isinstance(criterion, nn.MSELoss) else (valueMultiply if isinstance(criterion, nn.L1Loss) else 1))
-                total_train_lossWOpenalty += (lossWOpenalty.cpu().detach().numpy())
-                
-        if batch_idx_without_nan_count > 0:
-            mean_batch_train_loss = (total_train_loss/(batch_idx_without_nan_count)).astype('float32')
-            # train_epoch_loss_list.append(mean_batch_train_loss) # mean_batch_train_loss = epoch_train_loss
-            mean_batch_train_lossWOpenalty = (total_train_lossWOpenalty/(batch_idx_without_nan_count)).astype('float32')
-            train_epoch_loss_list.append(mean_batch_train_lossWOpenalty) # mean_batch_train_loss = epoch_train_loss
-            # print(f'Epoch [{epoch + 1}/{num_epoch}] - mean_batch Training Loss: {mean_batch_train_loss:.8f}')  
+  
+
+        (val_targets, val_outputs,
+         val_epoch_loss_W_penalty_ls,  val_epoch_loss_WO_penalty_ls, 
+         mean_batch_val_loss_WO_penalty) = evaluation(model, 
+                                                    val_epoch_loss_W_penalty_ls, val_epoch_loss_WO_penalty_ls, 
+                                                    criterion, val_loader, device, ESPF, Drug_SelfAttention, 
+                                                    weighted_threshold, few_weight, more_weight, 
+                                                    outputcontrol='plotLossCurve') 
+        (train_targets, train_outputs,
+         train_epoch_loss_W_penalty_ls,  train_epoch_loss_WO_penalty_ls, 
+         mean_batch_train_loss_WO_penalty) = evaluation(model, 
+                                                        train_epoch_loss_W_penalty_ls, train_epoch_loss_WO_penalty_ls, 
+                                                        criterion, train_loader, device, ESPF, Drug_SelfAttention, 
+                                                        weighted_threshold, few_weight, more_weight, 
+                                                        outputcontrol='plotLossCurve') 
         
-        mean_batch_val_loss, val_epoch_loss_list, mean_batch_eval_lossWOpenalty = evaluation(model, val_epoch_loss_list, criterion, val_loader, device,ESPF,Drug_SelfAttention, weighted_threshold, few_weight, more_weight, outputcontrol='plotLossCurve') # input arg kfoldCV must be None (1)
-                                               
+        
         if warmup_iters is not None:
             # print("lr of epoch", epoch + 1, "=>", lr_scheduler.get_lr()) 
             lr_scheduler.step()
 
-        if mean_batch_eval_lossWOpenalty < best_val_loss: # bestepoch
-            best_val_loss = mean_batch_eval_lossWOpenalty # bestepoch
+        if mean_batch_val_loss_WO_penalty < BE_val_loss_WO_penalty: # BEpo
+            BE_val_loss_WO_penalty = mean_batch_val_loss_WO_penalty # BEpo
+            BE_val_train_loss_WO_penalty = mean_batch_train_loss_WO_penalty
             best_weight = copy.deepcopy(model.state_dict()) # best epoch_weight
-            best_epoch = epoch+1 # bestepoch
+            best_epoch = epoch+1 # BEpo
             counter = 0
-            best_val_epoch_train_loss = mean_batch_train_loss
-            best_val_epoch_train_lossWOpenalty = mean_batch_train_lossWOpenalty
-            # best_val_lossWOpenalty = mean_batch_eval_lossWOpenalty
-            best_epoch_AttenScorMat_DrugSelf = model_output[1] # torch.Size([bsz, 8, 50, 50])(without dropout)
-            if len(model_output) == 3:
-                best_epoch_AttenScorMat_DrugCellSelf = model_output[2]
-            else:
-                best_epoch_AttenScorMat_DrugCellSelf = None
+            BE_val_targets, BE_val_outputs  = val_targets, val_outputs
+            BE_train_targets , BE_train_outputs = train_targets , train_outputs
+            BEpo_valLoss_W_penalty_ls = val_epoch_loss_W_penalty_ls
+            BEpo_valLoss_WO_penalty_ls = val_epoch_loss_WO_penalty_ls
+            BEpo_trainloss_W_penalty_ls = train_epoch_loss_W_penalty_ls
+            BEpo_trainLoss_WO_penalty_ls = train_epoch_loss_WO_penalty_ls
+
+
         else:
             counter += 1
             if counter >= patience:
@@ -242,4 +242,13 @@ def train(model, optimizer, batch_size, num_epoch,patience, warmup_iters, Decrea
     else:
         gradient_fig = None
         
-    return best_epoch, best_weight, best_val_loss, train_epoch_loss_list, val_epoch_loss_list, best_val_epoch_train_loss,best_val_epoch_train_lossWOpenalty, best_epoch_AttenScorMat_DrugSelf,best_epoch_AttenScorMat_DrugCellSelf, gradient_fig, gradient_norms_list
+    # print("BE_val_outputs",BE_val_outputs[:10],"\n","\n")
+    # print("val_outputs",val_outputs[:10])
+    
+    return (best_epoch, best_weight, BE_val_loss_WO_penalty, BE_val_train_loss_WO_penalty,
+            BEpo_trainloss_W_penalty_ls, BEpo_trainLoss_WO_penalty_ls,
+            BEpo_valLoss_W_penalty_ls, BEpo_valLoss_WO_penalty_ls,  
+            BE_val_targets, BE_val_outputs, BE_train_targets , BE_train_outputs,
+            gradient_fig, gradient_norms_list
+            )
+

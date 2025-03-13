@@ -1,9 +1,13 @@
 # corration.py
 import numpy as np
+import torch
 from scipy.stats import pearsonr, spearmanr
 
 #精簡版
 def correlation_func(splitType, data_AUC_matrix,ccl_names_AUC,drug_names_AUC,id_unrepeat,targets,outputs):
+    '''
+    targets and outputs need to be 1D torch tensor
+    '''    
     ans_dict = {} # GroundTruth AUC #key:ccl, value:[GT_auc]
     pred_dict = {} # Predicted AUC #key:ccl, value:[Pred_auc]
     pearson=[]
@@ -22,8 +26,8 @@ def correlation_func(splitType, data_AUC_matrix,ccl_names_AUC,drug_names_AUC,id_
         ValueCount = (mask.reshape(-1)).tolist().count(True) # Value's Count in mask
         # ID_paired_drugName[ID]=(np.array(drug_names_AUC)[mask.tolist()].tolist())
         # ID_paired_drugCount[ID]=drugCount #ValueCount
-        ans_dict[ID] = (np.concatenate(targets))[start:start+ValueCount] # store GT values of each CCL/Drug(id)
-        pred_dict[ID] = (np.concatenate(outputs))[start:start+ValueCount]# store predicted values of each CCL/Drug(id)
+        ans_dict[ID] = (targets)[start:start+ValueCount] # store GT values of each CCL/Drug(id)
+        pred_dict[ID] = (outputs)[start:start+ValueCount]# store predicted values of each CCL/Drug(id)
         start+=ValueCount  
         
     AllSameValuesList_count = 0    
@@ -35,14 +39,14 @@ def correlation_func(splitType, data_AUC_matrix,ccl_names_AUC,drug_names_AUC,id_
             continue  # Skip to the next iteration
 
         # check All Same Predicted Values Item_Count in {name}set # EX: 一個藥對應每個ccl時，輸出值都一樣
-        if np.all(predvalues == predvalues[0]):
+        if torch.all(predvalues == predvalues[0]):
             AllSameValuesList_count+=1 
         # 只有有一item不是都預測同一個值，那就會存到pearson list中去計算mean,modian,mode，所以mean,modian,mode可能部會是所有的item都在裡面
         else:
             if len(GTvalues)>=2: # pearsonr和spearmanr需要2個值以上，但是test=True時，drug-cell pair可能只有一個或零個
-                correlation_coef, p_value = pearsonr(predvalues, GTvalues)
+                correlation_coef, p_value = pearsonr(predvalues.cpu().numpy(), GTvalues.cpu().numpy())
                 # correlation_coef=abs(correlation_coef)
-                spearman_correlation_coef, p_value = spearmanr(predvalues, GTvalues)
+                spearman_correlation_coef, p_value = spearmanr(predvalues.cpu().numpy(), GTvalues.cpu().numpy())
                 # spearman_correlation_coef = abs(spearman_correlation_coef)
                 if splitType == 'byCCL':
                     pearson.append(correlation_coef)
@@ -101,9 +105,9 @@ def corration(id_cell_train,id_cell_val,id_cell_test,data_AUC_matrix,ccl_names_A
     for key,value in ans_train_dict.items():
         cor_pred = pred_train_dict[key]
         correlation_coef, p_value = pearsonr(cor_pred, value)
-        correlation_coef=abs(correlation_coef)
+        # correlation_coef=abs(correlation_coef)
         spearman_correlation_coef, p_value = spearmanr(cor_pred, value)
-        spearman_correlation_coef = abs(spearman_correlation_coef)
+        # spearman_correlation_coef = abs(spearman_correlation_coef)
         print("item number in a id", len(value))
         print(ccl_names_AUC[key],":",correlation_coef)
         train_pearson.append(correlation_coef)
@@ -124,9 +128,9 @@ def corration(id_cell_train,id_cell_val,id_cell_test,data_AUC_matrix,ccl_names_A
     for key,value in ans_val_dict.items():
         cor_pred = pred_val_dict[key]
         correlation_coef, p_value = pearsonr(cor_pred, value)
-        correlation_coef=abs(correlation_coef)
+        # correlation_coef=abs(correlation_coef)
         spearman_correlation_coef, p_value = spearmanr(cor_pred, value)
-        spearman_correlation_coef = abs(spearman_correlation_coef)
+        # spearman_correlation_coef = abs(spearman_correlation_coef)
         print("item number in a id", len(value))
         print(ccl_names_AUC[key],":",correlation_coef)
         val_pearson.append(correlation_coef)
@@ -146,9 +150,9 @@ def corration(id_cell_train,id_cell_val,id_cell_test,data_AUC_matrix,ccl_names_A
     for key,value in ans_test_dict.items():
         cor_pred = pred_test_dict[key]
         correlation_coef, p_value = pearsonr(cor_pred, value)
-        correlation_coef=abs(correlation_coef)
+        # correlation_coef=abs(correlation_coef)
         spearman_correlation_coef, p_value = spearmanr(cor_pred, value)
-        spearman_correlation_coef = abs(spearman_correlation_coef)
+        # spearman_correlation_coef = abs(spearman_correlation_coef)
         print("item number in a id", len(value))
         print(ccl_names_AUC[key],":",correlation_coef)
         test_pearson.append(correlation_coef)

@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 import os
+import torch
 
 def heatmap(attention_scores):
     # Define the colors and their corresponding positions (anchors)
@@ -32,7 +33,7 @@ def heatmap(attention_scores):
         spine.set_visible(False)
     plt.show()
 
-def loss_curve(model_name, train_epoch_loss_list, val_epoch_loss_list, best_epoch, best_val_loss, hyperparameter_folder_path, ylim_top):
+def loss_curve(model_name, train_epoch_loss_list, val_epoch_loss_list, best_epoch, best_val_loss, hyperparameter_folder_path,loss_type="loss_WO_penalty"):
     # Create a plot of the loss curve
     fig= plt.figure(figsize=(8, 6))
     # Plot training loss
@@ -55,7 +56,7 @@ def loss_curve(model_name, train_epoch_loss_list, val_epoch_loss_list, best_epoc
         plt.ylim(top=1.5, bottom=0)
     else:
         plt.ylim(top=None, bottom=None)
-    fig.savefig(os.path.join(hyperparameter_folder_path, 'training_validation_loss_curve.png'))
+    fig.savefig(os.path.join(hyperparameter_folder_path, f'train_valid_{loss_type}_curve.png'))
     return plt
     
 
@@ -124,8 +125,8 @@ def correlation_density(model_name,train_pearson,val_pearson,test_pearson,train_
 def Density_Plot_of_AUC_Values(datasets,hyperparameter_folder_path=None):
     fig, axs = plt.subplots(1, 3, figsize=(15, 5))
     for i, (targets, outputs, title, color) in enumerate(datasets):
-        sns.kdeplot(np.concatenate(targets).tolist(), color=color, label=f'GroundTruthAUC - {title}', ax=axs[i])
-        sns.kdeplot(np.concatenate(outputs).tolist(), color=color, linestyle='--', label=f'PredictedAUC - {title}', ax=axs[i])
+        sns.kdeplot(torch.cat(targets).tolist(), color=color, label=f'GroundTruthAUC - {title}', ax=axs[i])
+        sns.kdeplot(torch.cat(outputs).tolist(), color=color, linestyle='--', label=f'PredictedAUC - {title}', ax=axs[i])
         axs[i].set_title(f'{title} Set',fontsize=14)
         axs[i].set_xlabel('AUC values',fontsize=14)
         axs[i].legend(loc='upper left',fontsize=10)

@@ -1,9 +1,6 @@
 import torch
 import torch.nn as nn
 
-import torch
-import torch.nn as nn
-
 class FocalMSELoss(nn.Module):
     def __init__(self, alpha=8.0, gamma=1.0, regular_type=None, regular_lambda=1e-05):
         super(FocalMSELoss, self).__init__()
@@ -17,9 +14,9 @@ class FocalMSELoss(nn.Module):
     def forward(self, y_pred, y_true, model=None, weights=None):
         error = torch.abs(y_true - y_pred)
         weight = (1 - torch.exp(-self.alpha * error)) ** self.gamma  # Weight function
-        self.loss = (weight * (error ** 2)).mean()  # Weighted MSE
+        self.loss_WO_penalty = (weight * (error ** 2)).mean()  # Weighted MSE
         
-        loss_with_penalty= None
+        self.loss = self.loss_WO_penalty
         # Add regularization penalty if specified
         if self.regular_type and model:
             if self.regular_type == "L1":
@@ -30,9 +27,8 @@ class FocalMSELoss(nn.Module):
                 reg_penalty = sum(p.abs().sum() + p.pow(2).sum() for p in model.parameters())
             else:
                 raise ValueError(f"Unsupported regularization type: {self.regular_type}")
-            loss_with_penalty = self.loss + self.regular_lambda * reg_penalty
-            self.penalty_value = self.regular_lambda * reg_penalty
-            return loss_with_penalty
+            self.penalty_value = self.regular_lambda * reg_penalty 
+            self.loss += self.penalty_value
         return self.loss
 
     def __repr__(self):
@@ -52,11 +48,15 @@ class FocalMAELoss(nn.Module):
         self.loss_type="FocalMAELoss"
 
     def forward(self, y_pred, y_true, model=None, weights=None):
+        '''
+        weights: give more weight to few sample (AUC small sample)
+        weight: Focalloss give more weights to big loss
+        '''
         error = torch.abs(y_true - y_pred)
         weight = (1 - torch.exp(-self.alpha * error)) ** self.gamma  # Weight function
-        self.loss = (weight * error).mean()  # Weighted MAE
+        self.loss_WO_penalty = (weight * error).mean()  # Weighted MAE
         
-        loss_with_penalty= None
+        self.loss = self.loss_WO_penalty
         # Add regularization penalty if specified
         if self.regular_type and model:
             if self.regular_type == "L1":
@@ -67,9 +67,8 @@ class FocalMAELoss(nn.Module):
                 reg_penalty = sum(p.abs().sum() + p.pow(2).sum() for p in model.parameters())
             else:
                 raise ValueError(f"Unsupported regularization type: {self.regular_type}")
-            loss_with_penalty = self.loss + self.regular_lambda * reg_penalty
-            self.penalty_value = self.regular_lambda * reg_penalty
-            return loss_with_penalty
+            self.penalty_value = self.regular_lambda * reg_penalty 
+            self.loss += self.penalty_value
         return self.loss
 
     def __repr__(self):
@@ -107,9 +106,9 @@ class FocalHuberLoss(nn.Module):
         quadratic = 0.5 * (error ** 2)
         linear = self.delta * (error - 0.5 * self.delta)
         huber_loss = torch.where(error < self.delta, quadratic, linear)
-        self.loss = (weight * huber_loss).mean()
+        self.loss_WO_penalty = (weight * huber_loss).mean()
 
-        loss_with_penalty=None
+        self.loss = self.loss_WO_penalty
         # Add regularization penalty if specified
         if self.regular_type and model:
             if self.regular_type == "L1":
@@ -120,10 +119,8 @@ class FocalHuberLoss(nn.Module):
                 reg_penalty = sum(p.abs().sum() + p.pow(2).sum() for p in model.parameters())
             else:
                 raise ValueError(f"Unsupported regularization type: {self.regular_type}")
-            loss_with_penalty = self.loss + self.regular_lambda * reg_penalty
-            self.penalty_value = self.regular_lambda * reg_penalty
-            return loss_with_penalty
-        
+            self.penalty_value = self.regular_lambda * reg_penalty 
+            self.loss += self.penalty_value
         return self.loss
     def __repr__(self):
         return (f"FocalHuberLoss(delta={self.delta},alpha={self.alpha},gamma={self.gamma}),"
@@ -180,9 +177,9 @@ class Custom_Weighted_LossFunction(nn.Module):
             batch_sample_loss *= weights 
 
         # Aggregate loss (mean over batch)
-        self.loss = batch_sample_loss.mean()
+        self.loss_WO_penalty = batch_sample_loss.mean()
 
-        loss_with_penalty= None
+        self.loss = self.loss_WO_penalty
         # Add regularization penalty if specified
         if self.regular_type and model:
             if self.regular_type == "L1":
@@ -193,9 +190,8 @@ class Custom_Weighted_LossFunction(nn.Module):
                 reg_penalty = sum(p.abs().sum() + p.pow(2).sum() for p in model.parameters())
             else:
                 raise ValueError(f"Unsupported regularization type: {self.regular_type}")
-            loss_with_penalty = self.loss + self.regular_lambda * reg_penalty
-            self.penalty_value = self.regular_lambda * reg_penalty
-            return loss_with_penalty
+            self.penalty_value = self.regular_lambda * reg_penalty 
+            self.loss += self.penalty_value
         return self.loss
 
     def __repr__(self):
@@ -238,23 +234,23 @@ class Custom_LossFunction(nn.Module):
             Tensor: The computed loss.
         """
         if self.loss_type == "RMSE":
-            self.loss = torch.sqrt(self.mse_loss(prediction, target))
+            self.loss_WO_penalty = torch.sqrt(self.mse_loss(prediction, target))
         elif self.loss_type == "MSE":
-            self.loss = self.mse_loss(prediction, target)
+            self.loss_WO_penalty = self.mse_loss(prediction, target)
         elif self.loss_type == "MAE":
-            self.loss = self.mae_loss(prediction, target)
+            self.loss_WO_penalty = self.mae_loss(prediction, target)
         elif self.loss_type == "MAE+MSE":
             mae = self.mae_loss(prediction, target)
             mse = self.mse_loss(prediction, target)
-            self.loss = mae + self.loss_lambda * mse
+            self.loss_WO_penalty = mae + self.loss_lambda * mse
         elif self.loss_type == "MAE+RMSE":
             mae = self.mae_loss(prediction, target)
             mse = self.mse_loss(prediction, target)
-            self.loss = mae + self.loss_lambda * torch.sqrt(mse)
+            self.loss_WO_penalty = mae + self.loss_lambda * torch.sqrt(mse)
         else:
             raise ValueError(f"Unsupported loss type: {self.loss_type}")
         
-        loss_with_penalty= None
+        self.loss = self.loss_WO_penalty
         # Add regularization penalty if specified
         if self.regular_type and model:
             if self.regular_type == "L1":
@@ -265,9 +261,8 @@ class Custom_LossFunction(nn.Module):
                 reg_penalty = sum(p.abs().sum() + p.pow(2).sum() for p in model.parameters())
             else:
                 raise ValueError(f"Unsupported regularization type: {self.regular_type}")
-            loss_with_penalty = self.loss + self.regular_lambda * reg_penalty
-            self.penalty_value = self.regular_lambda * reg_penalty
-            return loss_with_penalty
+            self.penalty_value = self.regular_lambda * reg_penalty 
+            self.loss += self.penalty_value
         return self.loss
 
     def __repr__(self):
@@ -276,61 +271,9 @@ class Custom_LossFunction(nn.Module):
                 f"regular_type={self.regular_type}, "
                 f"regular_lambda={self.regular_lambda})")
 
-'''
-class RMSEplusRegular(nn.Module):
-    def __init__(self, regular_type,regular_lambda=0.001):
-        super(RMSEplusRegular, self).__init__()
-        self.mse_loss = nn.MSELoss()  # MSE
-        self.reg_lambda = regular_lambda
-        self.reg_type = regular_type
-
-    def forward(self, prediction, target, model):
-        mse = self.mse_loss(prediction, target)
-        if self.reg_type == 'L1':
-            reg_penalty= sum(p.abs().sum() for p in model.parameters())
-        elif self.reg_type == 'L2':
-            reg_penalty= sum(p.pow(2).sum() for p in model.parameters())
-        elif self.reg_type == 'L1+L2':
-            reg_penalty= sum(p.abs().sum() + p.pow(2).sum() for p in model.parameters())
-        combined_loss = torch.sqrt(mse)+ self.reg_lambda* reg_penalty  
-        return combined_loss
-    def __repr__(self):  # Customize how the object is represented
-        return "RMSE_plus_Regularization"
 
 
-class MAEplusMSE(nn.Module):
-    def __init__(self,MSE_lambda=1): # MSE_lambda: contril the weight of MSE
-        super(MAEplusMSE, self).__init__()
-        self.mae_loss = nn.L1Loss()  # MAE
-        self.mse_loss = nn.MSELoss()  # MSE
-        self.MSE_lambda = MSE_lambda
 
-    def forward(self, prediction, target):
-        mae = self.mae_loss(prediction, target)
-        mse = self.mse_loss(prediction, target)
-        combined_loss = mae+ self.MSE_lambda* mse
-        return combined_loss
-    def __repr__(self):  # Customize how the object is represented
-        return "MAEplusMSE"
-    
-class MAEplusRMSE(nn.Module):
-    def __init__(self,RMSE_lambda=1): # default: 1
-        super(MAEplusRMSE, self).__init__()
-        self.mae_loss = nn.L1Loss()  # MAE
-        self.mse_loss = nn.MSELoss()  # MSE (used for RMSE)
-        self.RMSE_lambda = RMSE_lambda
-
-    def forward(self, prediction, target):
-        mae = self.mae_loss(prediction, target)
-        mse = self.mse_loss(prediction, target)
-        combined_loss = mae+ self.RMSE_lambda* torch.sqrt(mse)
-        return combined_loss
-    def __repr__(self):  # Customize how the object is represented
-        return "MAEplusRMSE"
-    
-# Example usage
-# criterion = MAE_RMSEmean()
-'''
 
 # https://github.com/NYCUciflab/PAGAN_PXR/blob/504c6737d2d5ec759d3da5dba906dd3a9e2d16a1/utils/loss.py
 def BCEloss(pred, label):
