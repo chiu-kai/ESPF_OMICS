@@ -192,7 +192,7 @@ class SelfAttention(nn.Module):
         x = x.view(*new_x_shape) # changes the shape of x to the new_x_shape # x torch.Size([bsz, 50, 8, 16])
         return x.permute(0, 2, 1, 3)
 
-    def forward(self, hidden_states, attention_mask): 
+    def forward(self, hidden_states, mask): 
         # hidden_states:emb.shape:torch.Size([bsz, 50, 128]); attention_mask: ex_e_mask:torch.Size([bsz, 1, 1, 50])
         mixed_query_layer = self.query(hidden_states) #hidden_states: torch.Size([bsz, 50, 128])
         mixed_key_layer = self.key(hidden_states)
@@ -207,14 +207,15 @@ class SelfAttention(nn.Module):
         # attention_scores:torch.Size([bsz, 8, 50, 50])
         # Scaled Dot-Product: Prevent the dot products from growing too large, causing gradient Vanishing.
         attention_scores = attention_scores / math.sqrt(self.attention_head_size) # /16
-        # attention_scores:torch.Size([bsz, 8, 50, 50])
-        attention_scores = attention_scores + attention_mask #torch.Size([bsz, 1, 1, 50])[-0,-0,-0,-0,....,-10000,-10000,....]
-        # attention_scores+ attention_mask:torch.Size([bsz, 8, 50, 50])
         
+        attention_mask = torch.bmm(mask.float().unsqueeze(2), mask.float().unsqueeze(1))#(bsz,len)->(bsz,len,1),(bsz,1,len)#after batch-wise outer product(bsz,len,len) #bmm only take float
+        attention_mask = attention_mask.unsqueeze(1).expand_as(attention_scores) # not neccessory because broadcasting
+        attention_scores = attention_scores.masked_fill(attention_mask == 0, -1e8) #torch.Size([bsz, head, 50, 50])[i,i,i,i,....,-1e8,-1e8,-1e8,....] # Replaces values where mask == 0 with -1e8 # -1e8 softmax need very small number so it will output 0
+       
         # Normalize the attention scores to probabilities.
-        attention_probs_0 = nn.Softmax(dim=-1)(attention_scores) # attSention_probs:torch.Size([bsz, 8, 50, 50])
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs_0 = F.softmax(attention_scores, dim=-1) # attention_probs_0:torch.Size([bsz, 8, 50, 50])
+        attention_probs_0 = attention_probs_0.masked_fill(attention_mask == 0, 0)#Replaces values where mask == 0 with 0.0: to prevent the empty element to have value due to softmax 
+        # This is actually dropping out entire tokens to attend to, which might seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs_drop = self.dropout(attention_probs_0)
 
         context_layer = torch.matmul(attention_probs_drop, value_layer) #context_layer:torch.Size([bsz, 8, 50, 16])
@@ -317,7 +318,7 @@ class CrossAttention(nn.Module): # substructures 和 pathways 的 cross-attentio
         self.value_proj = nn.Linear(cell_dim, attn_dim)  # Project cell features to value space
         self.scale = attn_dim ** -0.5  # Scaling factor for dot product attention
 
-    def forward(self, drug_subunits, cell_subunits):
+    def forward(self, drug_subunits, cell_subunits, drug_sub_mask, cell_sub_mask):
         # drug_subunits: (batch_size, num_drug_subunits, drug_dim)
         # cell_subunits: (batch_size, num_cell_subunits, cell_dim)
 
@@ -482,19 +483,18 @@ class Omics_DrugESPF_Model(nn.Module):
                     print("\n Drug_SelfAttention is not applied \n")
                     self.print_flag  = False
                 # to apply mask to emb, treat mask like attention score matrix (weight), then do softmax and dropout, then multiply with emb
-                mask_weight =mask.clone().float().unsqueeze(1).repeat(1, 50, 1)# (bsz, 50)->(bsz,50,50)
-                mask_weight = (1.0 - mask_weight) * -10000.0
-                mask_weight = nn.Softmax(dim=-1)(mask_weight)
+                mask_weightBMM = torch.bmm(mask.float().unsqueeze(2), mask.float().unsqueeze(1))# (bsz, 50)->(bsz,50,50)(empty index of seq should not have value) 
+                mask_weight = (1.0 - mask_weightBMM) * -1e8
+                mask_weight = F.softmax(mask_weightBMM, dim=-1)
+                mask_weight = mask_weight.masked_fill(mask_weightBMM == 0, 0.0)
                 mask_weight = self.dropout(mask_weight)
-                drug_emb_masked = torch.matmul(mask_weight, drug_embed) # emb_masked: torch.Size([bsz, 50, 128]) # matmul矩陣相乘
+                drug_emb_masked = torch.bmm(mask_weight, drug_embed) # emb_masked: torch.Size([bsz, 50, 128]) # matmul矩陣相乘
                 # 沒做: class SelfOutput(nn.Module): # apply linear and skip conneaction and LayerNorm and dropout after 
 
             elif Drug_SelfAttention is True:
                 if self.print_flag is True:
                     print("\n Drug_SelfAttention is applied \n")
                     self.print_flag  = False
-                mask = mask.unsqueeze(1).unsqueeze(2) # mask.shape: torch.Size([bsz, 1, 1, 50])
-                mask = (1.0 - mask) * -10000.0
                 drug_emb_masked, attention_probs_0  = self.TransformerEncoder(drug_embed, mask)# hidden_states:drug_embed.shape:torch.Size([bsz, 50, 128]); mask: ex_e_mask:torch.Size([bsz, 1, 1, 50])
                 # drug_emb_masked: torch.Size([bsz, 50, 128]) 
                 # attention_probs_0 = nn.Softmax(dim=-1)(attention_scores) torch.Size([bsz, 8, 50, 50])(without dropout)
@@ -635,11 +635,12 @@ class Omics_DCSA_Model(nn.Module):
                 print("\n Drug_SelfAttention is not applied \n")
                 self.print_flag  = False
             # to apply mask to emb, treat mask like attention score matrix (weight), then do softmax and dropout, then multiply with emb
-            mask_weight =mask.clone().float().unsqueeze(1).repeat(1, 50, 1)# (bsz, 50)->(bsz,50,50)
-            mask_weight = (1.0 - mask_weight) * -10000.0
-            mask_weight = nn.Softmax(dim=-1)(mask_weight)
+            mask_weightBMM = torch.bmm(mask.float().unsqueeze(2), mask.float().unsqueeze(1))# (bsz, 50)->(bsz,50,50)(empty index of seq should not have value) 
+            mask_weight = (1.0 - mask_weightBMM) * -1e8 # 1,0經過softmax 0的機率不會是0，所以要把0變成-1e8經過softmax之後才會是0
+            mask_weight = F.softmax(mask_weightBMM, dim=-1)
+            mask_weight = mask_weight.masked_fill(mask_weightBMM == 0, 0.0) # 把全部都是0的vector都變成是0，因為softmax會把機率均分 
             mask_weight = self.dropout(mask_weight)
-            drug_emb_masked = torch.matmul(mask_weight, drug_embed) # emb_masked: torch.Size([bsz, 50, 128])
+            drug_emb_masked = torch.bmm(mask_weight, drug_embed) # emb_masked: torch.Size([bsz, 50, 128])# bmm only take 3D tensor # matmul can broadcast
             # 沒做: class SelfOutput(nn.Module): # apply linear and skip conneaction and LayerNorm and dropout after 
             # 沒做: positional encoding
             AttenScorMat_DrugSelf = None
@@ -648,8 +649,6 @@ class Omics_DCSA_Model(nn.Module):
             if self.print_flag is True:
                 print("\n Drug_SelfAttention is applied \n")
                 self.print_flag  = False
-            mask = mask.unsqueeze(1).unsqueeze(2) # mask.shape: torch.Size([bsz, 1, 1, 50])
-            mask = (1.0 - mask) * -10000.0
             drug_emb_masked, AttenScorMat_DrugSelf  = self.TransformerEncoder(drug_embed, mask)# hidden_states:drug_embed.shape:torch.Size([bsz, 50, 128]); mask: ex_e_mask:torch.Size([bsz, 1, 1, 50])
             # drug_emb_masked: torch.Size([bsz, 50, 128]) 
             # attention_probs_0 = nn.Softmax(dim=-1)(attention_scores) # attention_probs_0:torch.Size([bsz, 8, 50, 50])(without dropout)
@@ -678,9 +677,7 @@ class Omics_DCSA_Model(nn.Module):
         pad = torch.zeros(append_embeddings.size(0), append_embeddings.size(1), padding_dim, device=append_embeddings.device)
         append_embeddings = torch.cat([append_embeddings, pad], dim=-1)  # New shape: [bsz, 50+i, new_hidden_size]
         
-        DrugCell_mask = DrugCell_mask.unsqueeze(1).unsqueeze(2) 
-        DrugCell_mask = (1.0 - DrugCell_mask) * -10000.0 # mask.shape: torch.Size([bsz, 1, 1, 50+c])
-        append_embeddings, AttenScorMat_DrugCellSelf  = self.Drug_Cell_SelfAttention(append_embeddings, DrugCell_mask)
+        append_embeddings, AttenScorMat_DrugCellSelf  = self.Drug_Cell_SelfAttention(append_embeddings, DrugCell_mask)# DrugCell_mask.shape: torch.Size([bsz, 50+c])
         # append_embeddings: torch.Size([bsz, 50+c, 136]) # AttenScorMat_DrugCellSelf:torch.Size([bsz, 8, 50+c, 50+c])(without dropout)
 
         #skip connect the omics embeddings # not as necessary as skip connect the drug embeddings 

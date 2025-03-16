@@ -56,16 +56,16 @@ TrackGradient = False # False True
 activation_func = nn.ReLU()  # ReLU activation function # Leaky ReLu
 activation_func_final = nn.Sigmoid() # ScaledSigmoid(scale=8) GroundT range ( 0 ~ scale ) # ReLU_clamp(max=8)
 #nn.Sigmoid()or ReLU() or Linear/identity(when -log2AUC)
-batch_size = 400
+batch_size = 500
 num_epoch = 200 # for k fold CV 
 patience = 20
 warmup_iters = 60
 Decrease_percent = 0.9
 continuous = True
 learning_rate=1e-04
-criterion = Custom_LossFunction(loss_type="MSE", loss_lambda=1.0, regular_type=None, regular_lambda=1e-06) #nn.MSELoss()#
-#criterion =  FocalMSELoss(alpha=8.0, gamma=1.0, regular_type=None, regular_lambda=1e-05)\
-metrics_type_set = ["MSE", "MAE", "R^2"]
+# criterion = Custom_LossFunction(loss_type="MSE", loss_lambda=1.0, regular_type=None, regular_lambda=1e-06) #nn.MSELoss()#
+criterion =  FocalMSELoss(alpha=8.0, gamma=1.0, regular_type=None, regular_lambda=1e-05)
+metrics_type_set = [ "MAE", "R^2"] #"MSE",
 metrics_calculator = MetricsCalculator_nntorch(types = metrics_type_set)
 """ A customizable loss function class.
     Args:

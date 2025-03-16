@@ -5,3 +5,8 @@ utils/__pycache__/
 ESPFwSelfAttention/
 ESPFwoSelfAttention/
 DrugCellSelfAttention/
+infernce/
+utils_old/
+utils_main/
+main.py
+main_kfold_old.py

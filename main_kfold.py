@@ -93,7 +93,7 @@ if test is True:
     kfoldCV = 2
     print("kfoldCV",kfoldCV)
 
-
+print(criterion.loss_type)
 if 'weighted' in criterion.loss_type :    
     # Set threshold based on the 90th percentile # 將高於threshold的AUC權重增加
     weighted_threshold = np.nanpercentile(AUC_df.values, 90)    
@@ -126,20 +126,9 @@ if ESPF is True:
     vocab_path = "./ESPF/drug_codes_chembl_freq_1500.txt" # token
     sub_csv = pd.read_csv("./ESPF/subword_units_map_chembl_freq_1500.csv")# token with frequency
 
-    # drug_encode = pd.Series(drug_smiles.unique()).apply(drug2emb_encoder, args=(vocab_path, sub_csv, max_drug_len))# 將drug_smiles 使用_drug2emb_encoder function編碼成subword vector
+    # 將drug_smiles 使用_drug2emb_encoder function編碼成subword vector
     drug_encode = pd.Series(drug_smiles).apply(drug2emb_encoder, args=(vocab_path, sub_csv, max_drug_len))
-    # uniq_smile_dict = dict(zip(drug_smiles.unique(),drug_encode))# zip drug_smiles和其subword vector編碼 成字典
-
-    # print(type(smile_encode))
-    # print(smile_encode.shape)
-    # print(type(smile_encode.index))
-    # print((drug_encode.index.values).shape)#(42,)
-    # print((drug_encode).shape)#(42,)
-    # print(type(drug_encode))#<class 'pandas.core.series.Series'>
-    #print((drug_encode.values).shape)#(42,)
-    # print(drug_encode.values.tolist())
-    # Convert your data to tensors if they're in numpy
-    drug_features_tensor = torch.tensor(np.array(drug_encode.values.tolist()), dtype=torch.long).to(device)
+    drug_features_tensor = torch.tensor(np.array([i[:2] for i in drug_encode.values]), dtype=torch.long).to(device)#drug_features_tensor = torch.tensor(np.array(drug_encode.values.tolist()), dtype=torch.long).to(device)
 else:
     drug_encode = drug_df["MACCS166bits"]
     drug_encode_list = [list(map(int, item.split(','))) for item in drug_encode.values]
@@ -150,6 +139,7 @@ else:
 num_ccl = list(omics_data_dict.values())[0].shape[0]
 num_drug = drug_encode.shape[0]
 print("num_ccl,num_drug: ",num_ccl,num_drug)
+
 
 #--------------------------------------------------------------------------------------------------------------------------
 # Convert your data to tensors if they're in numpy
@@ -477,7 +467,7 @@ with open(output_file, "w") as file:
         results["Median"].append(f"Median {name} Pearson: {np.median(pearson):.6f}")
 
         mode_value, mode_count = stats.mode(np.round(pearson, 2), keepdims=True)
-        results["Mode"].append(f"Mode {name} Pearson: {mode_value[0]}, count={mode_count[0]}")
+        results["Mode"].append(f"Mode {name} Pearson: {mode_value[0]} count={mode_count[0]}")
 
         results["Skewness"].append(f"Skewness {name} Pearson: {stats.skew(pearson, bias=False, nan_policy='raise'):.6f}")
     file.write("\n".join("\n".join(v) for v in results.values()) + "\n")
@@ -493,7 +483,7 @@ with open(output_file, "w") as file:
         results["Median"].append(f"Median {name} spearman: {np.median(spearman):.6f}")
 
         mode_value, mode_count = stats.mode(np.round(spearman, 2), keepdims=True)
-        results["Mode"].append(f"Mode {name} spearman: {mode_value[0]}, count={mode_count[0]}")
+        results["Mode"].append(f"Mode {name} spearman: {mode_value[0]} count={mode_count[0]}")
 
         results["Skewness"].append(f"Skewness {name} spearman: {stats.skew(spearman, bias=False, nan_policy='raise'):.6f}")
     file.write("\n".join("\n".join(v) for v in results.values()) + "\n")

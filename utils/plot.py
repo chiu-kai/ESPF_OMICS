@@ -7,28 +7,37 @@ import numpy as np
 import os
 import torch
 
-def heatmap(attention_scores):
+from matplotlib.colors import LinearSegmentedColormap
+import matplotlib.pyplot as plt
+def heatmap(attention_scores_Matrix, fontsize_ticks=8, module="" ):
     # Define the colors and their corresponding positions (anchors)
     colors = ["#67749f","#6581b2","#b4d5e5", "white","#fae19b","#e9a94f", "red","#a10318"]  # Color sequence
     anchors = [0.0,0.1, 0.35,0.5,0.55,0.75,0.9, 1.0]  # Position of each color (0 = min, 1 = max)
 
     # Create a custom colormap with specified anchors
     custom_cmap = LinearSegmentedColormap.from_list("custom_heatmap", list(zip(anchors, colors)))
-    plt.figure(figsize=(7, 4))
+    plt.figure(figsize=(10, 8))
 
-    plt.imshow(attention_scores, aspect="auto", cmap=custom_cmap)
+    plt.imshow(attention_scores_Matrix, aspect="auto", cmap=custom_cmap, vmin=1, vmax=0) # make all color correspond to the specific value
     cbar = plt.colorbar(label="attention score")
     cbar.outline.set_visible(False) # remove the boundary/frame of the colorbar 
     plt.title("Attention Score Matrix", fontsize=14, fontweight='bold')
 
     # Set x and y axis labels
     plt.xlabel("Drug Substructures", fontsize=14, fontweight='bold', fontname='Times New Roman')
-    plt.ylabel("Genesets", fontsize=14, fontweight='bold', fontname='Times New Roman')
+    if module == "AttenScorMat_DrugSelf":
+        plt.ylabel("Drug Substructures", fontsize=14, fontweight='bold', fontname='Times New Roman')
+    if module == "AttenScorMat_DrugCellSelf":
+        plt.ylabel("Features", fontsize=14, fontweight='bold', fontname='Times New Roman')
 
     # Optionally, set the x and y ticks (example with some labels)
-    plt.xticks(ticks=np.arange(0, 10, step=1), labels=[f"sub{i}" for i in range(10)])
-    # plt.yticks(ticks=np.arange(0, 100, step=10), labels=[f"Sample {i+1}" for i in range(0, 100, 10)])
-    plt.yticks([])
+    
+    if module == "AttenScorMat_DrugSelf":
+        plt.xticks(fontsize=fontsize_ticks,fontweight="bold",rotation=75, ticks=np.arange(0, attention_scores_Matrix.shape[1], step=1), labels=[f"sub{i+1}" for i in range(attention_scores_Matrix.shape[1])])
+        plt.yticks(fontsize=fontsize_ticks,fontweight="bold",ticks=np.arange(0, attention_scores_Matrix.shape[1], step=1), labels=[f"sub{i+1}" for i in range(attention_scores_Matrix.shape[1])])
+    if module == "AttenScorMat_DrugCellSelf":
+        plt.xticks(fontsize=fontsize_ticks,fontweight="bold",rotation=75, ticks=np.arange(0, attention_scores_Matrix.shape[1], step=1), labels=([f"sub{i+1}" for i in range(attention_scores_Matrix.shape[1]-len(include_omics))] + include_omics) ) 
+        plt.yticks(fontsize=fontsize_ticks,fontweight="bold",ticks=np.arange(0, attention_scores_Matrix.shape[1], step=1), labels=([f"sub{i+1}" for i in range(attention_scores_Matrix.shape[1]-len(include_omics))] + include_omics) ) 
     for spine in plt.gca().spines.values(): # remove the boundary/frame of the plot 
         spine.set_visible(False)
     plt.show()

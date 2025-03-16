@@ -11,6 +11,7 @@ class OmicsDrugDataset(Dataset):
         self.splitType = splitType
         self.num_cells = list(self.omics_data_tensor_dict.values())[0].shape[0]
         self.num_drugs = drug_features_tensor.shape[0]
+        print("self.num_drugs",self.num_drugs)
         self.include_omics = include_omics
         self.omics_data_tensor = {}
         self.cell_idx = None  # Initialize first
