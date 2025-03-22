@@ -9,7 +9,8 @@ import torch
 
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
-def heatmap(attention_scores_Matrix, fontsize_ticks=8, module="" ):
+def heatmap(attention_scores_Matrix, drug_ID, cell_ID, include_omics ,fontsize_ticks=8, module="", sub_list=None ):
+    #sub: sequence of substructure ESPF text, list type
     # Define the colors and their corresponding positions (anchors)
     colors = ["#67749f","#6581b2","#b4d5e5", "white","#fae19b","#e9a94f", "red","#a10318"]  # Color sequence
     anchors = [0.0,0.1, 0.35,0.5,0.55,0.75,0.9, 1.0]  # Position of each color (0 = min, 1 = max)
@@ -20,24 +21,34 @@ def heatmap(attention_scores_Matrix, fontsize_ticks=8, module="" ):
 
     plt.imshow(attention_scores_Matrix, aspect="auto", cmap=custom_cmap, vmin=1, vmax=0) # make all color correspond to the specific value
     cbar = plt.colorbar(label="attention score")
+    cbar.ax.yaxis.label.set_weight("bold")  # Make label bold
     cbar.outline.set_visible(False) # remove the boundary/frame of the colorbar 
-    plt.title("Attention Score Matrix", fontsize=14, fontweight='bold')
 
     # Set x and y axis labels
-    plt.xlabel("Drug Substructures", fontsize=14, fontweight='bold', fontname='Times New Roman')
     if module == "AttenScorMat_DrugSelf":
+        plt.xlabel("Drug Substructures", fontsize=14, fontweight='bold', fontname='Times New Roman')
         plt.ylabel("Drug Substructures", fontsize=14, fontweight='bold', fontname='Times New Roman')
-    if module == "AttenScorMat_DrugCellSelf":
-        plt.ylabel("Features", fontsize=14, fontweight='bold', fontname='Times New Roman')
-
+        
     # Optionally, set the x and y ticks (example with some labels)
-    
     if module == "AttenScorMat_DrugSelf":
-        plt.xticks(fontsize=fontsize_ticks,fontweight="bold",rotation=75, ticks=np.arange(0, attention_scores_Matrix.shape[1], step=1), labels=[f"sub{i+1}" for i in range(attention_scores_Matrix.shape[1])])
-        plt.yticks(fontsize=fontsize_ticks,fontweight="bold",ticks=np.arange(0, attention_scores_Matrix.shape[1], step=1), labels=[f"sub{i+1}" for i in range(attention_scores_Matrix.shape[1])])
+        plt.title(f"{drug_ID} SelfAttention Score Matrix", fontsize=14, fontweight='bold')
+        if sub_list is not None:
+            plt.xticks(fontsize=fontsize_ticks,fontweight="bold",rotation=75, ticks=np.arange(0, attention_scores_Matrix.shape[1], step=1), labels=([f"{i}" for i in sub_list]) ) 
+            plt.yticks(fontsize=fontsize_ticks,fontweight="bold",ticks=np.arange(0, attention_scores_Matrix.shape[1], step=1), labels=([f"{i}" for i in sub_list]) ) 
+        else:
+            plt.xticks(fontsize=fontsize_ticks,fontweight="bold",rotation=75, ticks=np.arange(0, attention_scores_Matrix.shape[1], step=1), labels=[f"sub{i+1}" for i in range(attention_scores_Matrix.shape[1])])
+            plt.yticks(fontsize=fontsize_ticks,fontweight="bold",ticks=np.arange(0, attention_scores_Matrix.shape[1], step=1), labels=[f"sub{i+1}" for i in range(attention_scores_Matrix.shape[1])])
+            
     if module == "AttenScorMat_DrugCellSelf":
-        plt.xticks(fontsize=fontsize_ticks,fontweight="bold",rotation=75, ticks=np.arange(0, attention_scores_Matrix.shape[1], step=1), labels=([f"sub{i+1}" for i in range(attention_scores_Matrix.shape[1]-len(include_omics))] + include_omics) ) 
-        plt.yticks(fontsize=fontsize_ticks,fontweight="bold",ticks=np.arange(0, attention_scores_Matrix.shape[1], step=1), labels=([f"sub{i+1}" for i in range(attention_scores_Matrix.shape[1]-len(include_omics))] + include_omics) ) 
+        plt.title(f"{drug_ID} - {cell_ID} SelfAttention Score Matrix", fontsize=14, fontweight='bold')
+        if sub_list is not None:
+            plt.xticks(fontsize=fontsize_ticks,fontweight="bold",rotation=75, ticks=np.arange(0, attention_scores_Matrix.shape[1], step=1), labels=([f"{i}" for i in sub_list] + include_omics) ) 
+            plt.yticks(fontsize=fontsize_ticks,fontweight="bold",ticks=np.arange(0, attention_scores_Matrix.shape[1], step=1), labels=([f"{i}" for i in sub_list] + include_omics) ) 
+        else:
+            plt.xticks(fontsize=fontsize_ticks,fontweight="bold",rotation=75, ticks=np.arange(0, attention_scores_Matrix.shape[1], step=1), labels=([f"sub{i+1}" for i in range(attention_scores_Matrix.shape[1]-len(include_omics))] + include_omics) ) 
+            plt.yticks(fontsize=fontsize_ticks,fontweight="bold",ticks=np.arange(0, attention_scores_Matrix.shape[1], step=1), labels=([f"sub{i+1}" for i in range(attention_scores_Matrix.shape[1]-len(include_omics))] + include_omics) ) 
+        
+        
     for spine in plt.gca().spines.values(): # remove the boundary/frame of the plot 
         spine.set_visible(False)
     plt.show()

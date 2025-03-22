@@ -10,7 +10,7 @@ import torch.optim as optim
 from torch.utils.data import  DataLoader, Subset
 import torch.nn.init as init
 from sklearn.model_selection import KFold
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 import copy
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -56,8 +56,8 @@ for omic_type in include_omics:
     if test is True:
         # Specify the index as needed
         omics_data_dict[omic_type] = omics_data_dict[omic_type][:76]  # Adjust the row selection as needed  
-    if omic_type == "Exp":# apply Column-wise Min-Max Normalization 
-        scaler = MinMaxScaler() 
+    if omic_type == "Exp":# apply Column-wise z-score standardization 
+        scaler = StandardScaler() 
         omics_data_dict[omic_type] = pd.DataFrame(scaler.fit_transform(omics_data_dict[omic_type]),index=omics_data_dict[omic_type].index,columns=omics_data_dict[omic_type].columns)
 
     omics_data_tensor_dict[omic_type]  = torch.tensor(omics_data_dict[omic_type].values, dtype=torch.float32).to(device)

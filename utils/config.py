@@ -43,13 +43,16 @@ attention_probs_dropout_prob = 0.1
 hidden_dropout_prob = 0.1
 
 if ESPF is True:
-    
     drug_encode_dims =[1600,400,100] # 50*128  
     dense_layer_dim = sum(omics_encode_dim_dict[omic_type][2] for omic_type in include_omics) + drug_encode_dims[2] # MLPDim
 elif ESPF is False:
-    
     drug_encode_dims =[110,55,22]
     dense_layer_dim = sum(omics_encode_dim_dict[omic_type][2] for omic_type in include_omics) + drug_encode_dims[2] # MLPDim
+elif model_name = "Omics_DCSA_Model":
+    drug_encode_dims =[(max_drug_len+len(include_omics))*(drug_embedding_feature_size+num_attention_heads)+ (len(include_omics)*128), 700, 70, 1] #
+    dense_layer_dim = None
+print("drug_encode_dims",drug_encode_dims)
+print("dense_layer_dim",dense_layer_dim)
 #需再修改-------------
 TrackGradient = False # False True
 
@@ -63,10 +66,10 @@ warmup_iters = 60
 Decrease_percent = 0.9
 continuous = True
 learning_rate=1e-04
-# criterion = Custom_LossFunction(loss_type="MSE", loss_lambda=1.0, regular_type=None, regular_lambda=1e-06) #nn.MSELoss()#
-criterion =  FocalMSELoss(alpha=8.0, gamma=1.0, regular_type=None, regular_lambda=1e-05)
 metrics_type_set = [ "MAE", "R^2"] #"MSE",
 metrics_calculator = MetricsCalculator_nntorch(types = metrics_type_set)
+# criterion = Custom_LossFunction(loss_type="MSE", loss_lambda=1.0, regular_type=None, regular_lambda=1e-06) #nn.MSELoss()#
+criterion =  FocalMSELoss(alpha=8.0, gamma=1.0, regular_type=None, regular_lambda=1e-05)
 """ A customizable loss function class.
     Args:
         loss_type (str): The type of loss to use ("RMSE", "MSE", "MAE", "MAE+MSE", "MAE+RMSE")/("weighted_RMSE", "weighted_MSE", "weighted_MAE", "weighted_MAE+MSE", "weighted_MAE+RMSE").

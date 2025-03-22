@@ -580,17 +580,16 @@ class Omics_DCSA_Model(nn.Module):
         self._init_weights(self.Drug_Cell_SelfAttention)
 
 # Define the final prediction network 
-        dense_layer_dim=7064
         self.model_final_add = nn.Sequential(
-            nn.Linear(7064, 700),
-            nn.BatchNorm1d(700), 
+            nn.Linear(drug_encode_dims[0], drug_encode_dims[1]),
+            nn.BatchNorm1d(drug_encode_dims[1]), 
             activation_func,
             nn.Dropout(p=0.1),
-            nn.Linear(700, 70),
-            nn.BatchNorm1d(70), 
+            nn.Linear(drug_encode_dims[1], drug_encode_dims[2]),
+            nn.BatchNorm1d(drug_encode_dims[2]), 
             activation_func,
             nn.Dropout(p=0.1),
-            nn.Linear(70, 1),
+            nn.Linear(drug_encode_dims[2], drug_encode_dims[3]),
             activation_func_final)
         # Initialize weights with Kaiming uniform initialization, bias with aero
         self._init_weights(self.model_final_add)
@@ -682,7 +681,7 @@ class Omics_DCSA_Model(nn.Module):
 
         #skip connect the omics embeddings # not as necessary as skip connect the drug embeddings 
         append_embeddings = torch.cat([ torch.cat(omic_embeddings_ls, dim=1), append_embeddings.reshape(append_embeddings.size(0), -1)], dim=1) # dim=1: turn into 1D 
-        #omic_embeddings_ls(bsz, 128) , append_embeddings(bsz, 50+c, 136)
+        #omic_embeddings_ls(bsz, c, 128) + append_embeddings(bsz, 50+c, 136) => ( bsz, (50+c)*136+ c*128 )
         # drug 有50*128，omices有i*128，可能會差太多，看drug要不要先降維根omics一樣i*128 # 先不要
     
     # Final MLP
