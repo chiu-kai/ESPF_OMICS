@@ -356,13 +356,20 @@ print("Attended Values Shape:", attended_values.shape)  # (batch_size, num_drug_
 
 # End of Modules------------------------------------------------------------------------------------------------------------------------------------------------------
 
+def create_mlpEncoder(dimList, activation_func):
+    layers = []
+    for i in range(len(dimList) - 1):  
+        layers.append(nn.Linear(dimList[i], dimList[i + 1]))
+        if i < len(dimList) - 2:  
+            layers.append(activation_func)
 
+    return nn.Sequential(*layers)
 
 
 # Models------------------------------------------------------------------------------------------------------------------------------------------------------
 class Omics_DrugESPF_Model(nn.Module):
     def __init__(self,omics_encode_dim_dict,drug_encode_dims, activation_func,activation_func_final,dense_layer_dim, device, ESPF, Drug_SelfAttention,
-                 pos_emb_type, hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeaetures_dict, max_drug_len, TCGA_pretrain_weight_path_dict=None):
+                 pos_emb_type, hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len, TCGA_pretrain_weight_path_dict=None):
         super(Omics_DrugESPF_Model, self).__init__()
 
         def load_TCGA_pretrain_weight(model, pretrained_weights_path, device):
@@ -379,14 +386,17 @@ class Omics_DrugESPF_Model(nn.Module):
 
 # Create subnetworks for each omic type dynamically
         self.MLP4omics_dict = nn.ModuleDict()
-        for omic_type in omics_numfeaetures_dict.keys():
-            self.MLP4omics_dict[omic_type] = nn.Sequential(
-                nn.Linear(omics_numfeaetures_dict[omic_type], omics_encode_dim_dict[omic_type][0]),
-                activation_func,
-                nn.Linear(omics_encode_dim_dict[omic_type][0], omics_encode_dim_dict[omic_type][1]),
-                activation_func,
-                nn.Linear(omics_encode_dim_dict[omic_type][1], omics_encode_dim_dict[omic_type][2]),
-                activation_func
+        # for omic_type in omics_numfeatures_dict.keys():
+        #     self.MLP4omics_dict[omic_type] = nn.Sequential(
+        #         nn.Linear(omics_numfeatures_dict[omic_type], omics_encode_dim_dict[omic_type][0]),
+        #         activation_func,
+        #         nn.Linear(omics_encode_dim_dict[omic_type][0], omics_encode_dim_dict[omic_type][1]),
+        #         activation_func,
+        #         nn.Linear(omics_encode_dim_dict[omic_type][1], omics_encode_dim_dict[omic_type][2]),
+        #         activation_func
+        #     )
+        for omic_type in omics_numfeatures_dict.keys():
+            self.MLP4omics_dict[omic_type] = create_mlpEncoder([omics_numfeatures_dict[omic_type]] + omics_encode_dim_dict[omic_type], activation_func
             )
             # Initialize with TCGA pretrain weight
             if TCGA_pretrain_weight_path_dict is not None:
@@ -526,7 +536,7 @@ class Omics_DrugESPF_Model(nn.Module):
 # Omics_DCSA_Model
 class Omics_DCSA_Model(nn.Module):
     def __init__(self,omics_encode_dim_dict,drug_encode_dims, activation_func,activation_func_final,dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
-                 hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeaetures_dict, max_drug_len, TCGA_pretrain_weight_path_dict=None):
+                 hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len, TCGA_pretrain_weight_path_dict=None):
         super(Omics_DCSA_Model, self).__init__()
         self.num_attention_heads = num_attention_heads
 
@@ -543,14 +553,17 @@ class Omics_DCSA_Model(nn.Module):
                 print("Model keys: ", model_keys, " Loaded keys: ", loaded_keys)
         
         self.MLP4omics_dict = nn.ModuleDict()
-        for omic_type in omics_numfeaetures_dict.keys():
-            self.MLP4omics_dict[omic_type] = nn.Sequential(
-                nn.Linear(omics_numfeaetures_dict[omic_type], omics_encode_dim_dict[omic_type][0]),
-                activation_func,
-                nn.Linear(omics_encode_dim_dict[omic_type][0], omics_encode_dim_dict[omic_type][1]),
-                activation_func,
-                nn.Linear(omics_encode_dim_dict[omic_type][1], omics_encode_dim_dict[omic_type][2]),
-                activation_func
+        # for omic_type in omics_numfeatures_dict.keys():
+        #     self.MLP4omics_dict[omic_type] = nn.Sequential(
+        #         nn.Linear(omics_numfeatures_dict[omic_type], omics_encode_dim_dict[omic_type][0]),
+        #         activation_func,
+        #         nn.Linear(omics_encode_dim_dict[omic_type][0], omics_encode_dim_dict[omic_type][1]),
+        #         activation_func,
+        #         nn.Linear(omics_encode_dim_dict[omic_type][1], omics_encode_dim_dict[omic_type][2]),
+        #         activation_func
+        #     )
+        for omic_type in omics_numfeatures_dict.keys():
+            self.MLP4omics_dict[omic_type] = create_mlpEncoder([omics_numfeatures_dict[omic_type]] + omics_encode_dim_dict[omic_type], activation_func
             )
             # Initialize with TCGA pretrain weight
             if TCGA_pretrain_weight_path_dict is not None:
@@ -559,7 +572,7 @@ class Omics_DCSA_Model(nn.Module):
                 self._init_weights(self.MLP4omics_dict[omic_type])
 
             #apply a linear tranformation to omics embedding to match the hidden size of the drug
-            self.match_drug_dim = nn.Linear(omics_encode_dim_dict[omic_type][2], hidden_size)
+            self.match_drug_dim = nn.Linear(omics_encode_dim_dict[omic_type][-1], hidden_size)
             self._init_weights(self.match_drug_dim)
         
 #ESPF            

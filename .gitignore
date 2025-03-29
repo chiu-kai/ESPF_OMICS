@@ -1,4 +1,5 @@
 results/
+results_GDSC/
 .*
 __pycache__/
 utils/__pycache__/
@@ -11,3 +12,4 @@ utils_main/
 main.py
 main_kfold_old.py
 MACCS166/
+GDSC_prediction.ipynb

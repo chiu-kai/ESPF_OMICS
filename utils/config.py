@@ -32,8 +32,8 @@ kfoldCV = 2
 include_omics = ['Exp']
 max_drug_len=50 # 不夠補零補到50 / 超過取前50個subwords(index) !!!!須改方法!!!! 
 drug_embedding_feature_size = 128
-ESPF = False # False True
-Drug_SelfAttention = False
+ESPF = True # False True
+Drug_SelfAttention = True
 pos_emb_type = 'sinusoidal' # 'learned' 'sinusoidal'
 #需再修改-----------
 
@@ -48,7 +48,7 @@ if ESPF is True:
 elif ESPF is False:
     drug_encode_dims =[110,55,22]
     dense_layer_dim = sum(omics_encode_dim_dict[omic_type][2] for omic_type in include_omics) + drug_encode_dims[2] # MLPDim
-elif model_name = "Omics_DCSA_Model":
+if model_name == "Omics_DCSA_Model":
     drug_encode_dims =[(max_drug_len+len(include_omics))*(drug_embedding_feature_size+num_attention_heads)+ (len(include_omics)*128), 700, 70, 1] #
     dense_layer_dim = None
 print("drug_encode_dims",drug_encode_dims)
