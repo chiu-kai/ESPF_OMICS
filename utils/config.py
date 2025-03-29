@@ -25,7 +25,7 @@ TCGA_pretrain_weight_path_dict = {'Mut': "./results/Encoder_tcga_mut_1000_100_50
                                 }
 seed = 42
 #hyperparameter
-model_name = "Omics_DrugESPF_Model" # Omics_DrugESPF_Model  Omics_DCSA_Model
+model_name = "Omics_DCSA_Model" # Omics_DrugESPF_Model  Omics_DCSA_Model
 AUCtransform = None #"-log2"
 splitType= 'byCCL' # byCCL byDrug
 kfoldCV = 2
@@ -34,6 +34,7 @@ max_drug_len=50 # 不夠補零補到50 / 超過取前50個subwords(index) !!!!�
 drug_embedding_feature_size = 128
 ESPF = True # False True
 Drug_SelfAttention = True
+n_layer = 3 # transformer layer number
 pos_emb_type = 'sinusoidal' # 'learned' 'sinusoidal'
 #需再修改-----------
 
@@ -66,10 +67,10 @@ warmup_iters = 60
 Decrease_percent = 0.9
 continuous = True
 learning_rate=1e-04
-metrics_type_set = [ "MAE", "R^2"] #"MSE",
+metrics_type_set = [ "MSE", "R^2"] #"MSE",
 metrics_calculator = MetricsCalculator_nntorch(types = metrics_type_set)
-# criterion = Custom_LossFunction(loss_type="MSE", loss_lambda=1.0, regular_type=None, regular_lambda=1e-06) #nn.MSELoss()#
-criterion =  FocalMSELoss(alpha=8.0, gamma=1.0, regular_type=None, regular_lambda=1e-05)
+criterion = Custom_LossFunction(loss_type="MAE", loss_lambda=1.0, regular_type=None, regular_lambda=1e-06) #nn.MSELoss()#
+#criterion =  FocalMSELoss(alpha=8.0, gamma=1.0, regular_type=None, regular_lambda=1e-05)
 """ A customizable loss function class.
     Args:
         loss_type (str): The type of loss to use ("RMSE", "MSE", "MAE", "MAE+MSE", "MAE+RMSE")/("weighted_RMSE", "weighted_MSE", "weighted_MAE", "weighted_MAE+MSE", "weighted_MAE+RMSE").

@@ -5,7 +5,7 @@ from utils.Custom_Activation_Function import ScaledSigmoid, ReLU_clamp
 from utils.Metrics import MetricsCalculator_nntorch
 
 test = True #False, True: batch_size = 3, num_epoch = 2, full dataset
-drug_df_path= "../data/DAPL/share/GDSC_drug_merge_pubchem_dropNA.csv"
+drug_df_path= "../data/DAPL/share/GDSC_drug_merge_pubchem_dropNA_MACCS.csv"
 AUC_df_path = "../data/DAPL/share/gdsc1+2_ccle_AUC_sorted.csv" # gdsc1+2_ccle_z-score　gdsc1+2_ccle_AUC
 omics_files = {
     'Mut': "",
@@ -25,15 +25,16 @@ TCGA_pretrain_weight_path_dict = {'Mut': "",
                                 }
 seed = 42
 #hyperparameter
-model_name = "Omics_DCSA_Model" # Omics_DrugESPF_Model  Omics_DCSA_Model
+model_name = "Omics_DrugESPF_Model" # Omics_DrugESPF_Model  Omics_DCSA_Model
 AUCtransform = None #"-log2"
 splitType= 'byCCL' # byCCL byDrug
 kfoldCV = 2
 include_omics = ['Exp']
 max_drug_len=50 # 不夠補零補到50 / 超過取前50個subwords(index) !!!!須改方法!!!! 
 drug_embedding_feature_size = 128
-ESPF = True # False True
-Drug_SelfAttention = True
+ESPF = False # False True
+Drug_SelfAttention = False
+n_layer = 3 # transformer layer number
 pos_emb_type = 'sinusoidal' # 'learned' 'sinusoidal'
 #需再修改-----------
 

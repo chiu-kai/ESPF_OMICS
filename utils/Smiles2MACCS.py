@@ -9,15 +9,15 @@ import csv
 from rdkit import Chem
 from rdkit.Chem import MACCSkeys
 
-inputfilename ='./no_Imputation_PRISM_Repurposing_Secondary_Screen_data/smiles(Secondary_Screen_treatment_info).csv'
-outputfilename = './no_Imputation_PRISM_Repurposing_Secondary_Screen_data/2MACCS(Secondary_Screen_treatment_info).csv'
+inputfilename ='../../data/DAPL/share/GDSC_drug_merge_pubchem_dropNA.csv'
+outputfilename = '../../data/DAPL/share/GDSC_drug_merge_pubchem_dropNA_MACCS.csv'
 
 with open(outputfilename, 'w', newline='') as outputfile: # Open a new CSV file in write mode
     writer = csv.writer(outputfile) # Create a CSV writer object
     
     with open(inputfilename, 'r') as file:
         reader = csv.reader(file)# Create a CSV reader object
-        header=['', 'Name', 'BRD_ID', 'name', 'moa', 'target', 'disease.area', 'indication', 'smiles', 'phase','MACCS166bits']
+        header=['DRUG_NAME', 'PATHWAY_NAME', 'synonyms', 'pathway_name', 'target', 'pubchem', 'Dataset', 'name', 'SMILES','MACCS166bits']
         writer.writerow(header)# Write the header row
         for idx,row in enumerate(reader):
             if idx>0:

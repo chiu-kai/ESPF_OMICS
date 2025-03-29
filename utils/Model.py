@@ -291,23 +291,27 @@ class Encoder(nn.Module):  # Transformer Encoder for drug feature # Drug_SelfAtt
         return layer_output , attention_probs_0    # transformer 最後的輸出
 
 class Encoder_MultipleLayers(nn.Module): # 用Encoder更新representation n_layer次 # DeepTTA paper寫6次
-    def __init__(self, n_layer, hidden_size, intermediate_size,
-                 num_attention_heads, attention_probs_dropout_prob, hidden_dropout_prob): #(8,128,512,8,0.1,0.1)
+    def __init__(self, hidden_size, intermediate_size,
+                 num_attention_heads, attention_probs_dropout_prob, hidden_dropout_prob, n_layer=3): #(128, 512, 8, 0.1, 0.1, 6)
         super(Encoder_MultipleLayers, self).__init__()
         layer = Encoder(hidden_size, intermediate_size, num_attention_heads,
                         attention_probs_dropout_prob, hidden_dropout_prob) # (128,512,8,0.1,0.1)
-        self.layer = nn.ModuleList([copy.deepcopy(layer) for _ in range(n_layer)])
+        self.layers = nn.ModuleList([copy.deepcopy(layer) for _ in range(n_layer)])
 
-    def forward(self, hidden_states, attention_mask, output_all_layers=False):
+    def forward(self, hidden_states, attention_mask):
+        for layer_module in self.layers:
+            hidden_states, attention_probs_0 = layer_module(hidden_states, attention_mask) 
+        return hidden_states, attention_probs_0  # transformer 最後的輸出
+
+    def output_all_layers(self, hidden_states, attention_mask):
+        """ 需要時才計算所有層的輸出，不佔用額外記憶體 """
         embeddings_all_layers = []
         attention_probs_all_layers = []
-        for layer_module in self.layer:
-            hidden_states, attention_probs_0 = layer_module(hidden_states, attention_mask) 
-            if output_all_layers is True:
-               embeddings_all_layers.append(hidden_states)
-               attention_probs_all_layers.append(attention_probs_0)
-               return embeddings_all_layers,attention_probs_all_layers
-        return hidden_states, attention_probs_0  # transformer 最後的輸出
+        for layer_module in self.layers:
+            hidden_states, attention_probs = layer_module(hidden_states, attention_mask)
+            embeddings_all_layers.append(hidden_states)
+            attentippend(attention_probs)
+        return embeddings_all_layers, attention_probs_all_layers
 
         
 class CrossAttention(nn.Module): # substructures 和 pathways 的 cross-attention
@@ -369,9 +373,9 @@ def create_mlpEncoder(dimList, activation_func):
 # Models------------------------------------------------------------------------------------------------------------------------------------------------------
 class Omics_DrugESPF_Model(nn.Module):
     def __init__(self,omics_encode_dim_dict,drug_encode_dims, activation_func,activation_func_final,dense_layer_dim, device, ESPF, Drug_SelfAttention,
-                 pos_emb_type, hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len, TCGA_pretrain_weight_path_dict=None):
+                 pos_emb_type, hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,n_layer, TCGA_pretrain_weight_path_dict=None):
         super(Omics_DrugESPF_Model, self).__init__()
-
+        self.n_layer = n_layer
         def load_TCGA_pretrain_weight(model, pretrained_weights_path, device):
             state_dict = torch.load(pretrained_weights_path, map_location=device)  # Load the state_dict
             encoder_state_dict = {key[len("encoder."):]: value for key, value in state_dict.items() if key.startswith('encoder')}  # Extract encoder weights
@@ -414,7 +418,8 @@ class Omics_DrugESPF_Model(nn.Module):
             # self.output = SelfOutput(hidden_size, hidden_dropout_prob) # (128,0.1) # apply linear and skip conneaction and LayerNorm and dropout after attention
             # if attention is True  
             elif Drug_SelfAttention is True: 
-                self.TransformerEncoder = Encoder(hidden_size, intermediate_size, num_attention_heads,attention_probs_dropout_prob, hidden_dropout_prob)#(128,512,8,0.1,0.1)
+                #self.TransformerEncoder = Encoder(hidden_size, intermediate_size, num_attention_heads,attention_probs_dropout_prob, hidden_dropout_prob)#(128,512,8,0.1,0.1)
+                self.TransformerEncoder = Encoder_MultipleLayers(hidden_size, intermediate_size, num_attention_heads,attention_probs_dropout_prob, hidden_dropout_prob, n_layer=n_layer)#(128,512,8,0.1,0.1,3)
                 self._init_weights(self.TransformerEncoder)
 
             self.MLP4ESPF = nn.Sequential(
@@ -508,6 +513,10 @@ class Omics_DrugESPF_Model(nn.Module):
                 drug_emb_masked, attention_probs_0  = self.TransformerEncoder(drug_embed, mask)# hidden_states:drug_embed.shape:torch.Size([bsz, 50, 128]); mask: ex_e_mask:torch.Size([bsz, 1, 1, 50])
                 # drug_emb_masked: torch.Size([bsz, 50, 128]) 
                 # attention_probs_0 = nn.Softmax(dim=-1)(attention_scores) torch.Size([bsz, 8, 50, 50])(without dropout)
+                """需要所有層時，才手動計算
+                drug_emb_masked_all_layer, AttenScorMat_DrugSelf_all_layer = self.TransformerEncoder.compute_all_layers(drug_embed, mask)    
+                self.attention_probs = drug_emb_masked_all_layer[self.n_layer]
+                """
                 self.attention_probs = attention_probs_0
             elif Drug_SelfAttention is None:
                     print("\n Drug_SelfAttention is assign to None , please assign to False or True \n")
@@ -536,7 +545,7 @@ class Omics_DrugESPF_Model(nn.Module):
 # Omics_DCSA_Model
 class Omics_DCSA_Model(nn.Module):
     def __init__(self,omics_encode_dim_dict,drug_encode_dims, activation_func,activation_func_final,dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
-                 hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len, TCGA_pretrain_weight_path_dict=None):
+                 hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,n_layer, TCGA_pretrain_weight_path_dict=None):
         super(Omics_DCSA_Model, self).__init__()
         self.num_attention_heads = num_attention_heads
 
@@ -585,12 +594,16 @@ class Omics_DCSA_Model(nn.Module):
 
 # if attention is True  
         elif Drug_SelfAttention is True: 
-            self.TransformerEncoder = Encoder(hidden_size, intermediate_size, num_attention_heads,attention_probs_dropout_prob, hidden_dropout_prob)#(128,512,8,0.1,0.1)
+            # self.TransformerEncoder = Encoder(hidden_size, intermediate_size, num_attention_heads,attention_probs_dropout_prob, hidden_dropout_prob)#(128,512,8,0.1,0.1)
+            self.TransformerEncoder = Encoder_MultipleLayers(hidden_size, intermediate_size, num_attention_heads,attention_probs_dropout_prob, hidden_dropout_prob, n_layer=n_layer)#(128,512,8,0.1,0.1,3)
             self._init_weights(self.TransformerEncoder)
 
 # Drug_Cell_SelfAttention
-        self.Drug_Cell_SelfAttention = Encoder(hidden_size+num_attention_heads, intermediate_size, num_attention_heads,attention_probs_dropout_prob, hidden_dropout_prob)#(128+8,512,8,0.1,0.1)
+        #self.Drug_Cell_SelfAttention = Encoder(hidden_size+num_attention_heads, intermediate_size, num_attention_heads,attention_probs_dropout_prob, hidden_dropout_prob)#(128+8,512,8,0.1,0.1)
+        self.Drug_Cell_SelfAttention = Encoder_MultipleLayers(hidden_size+num_attention_heads, intermediate_size, num_attention_heads,attention_probs_dropout_prob, hidden_dropout_prob, n_layer=n_layer)
         self._init_weights(self.Drug_Cell_SelfAttention)
+
+ 
 
 # Define the final prediction network 
         self.model_final_add = nn.Sequential(
@@ -660,10 +673,13 @@ class Omics_DCSA_Model(nn.Module):
         elif Drug_SelfAttention is True:
             if self.print_flag is True:
                 print("\n Drug_SelfAttention is applied \n")
-                self.print_flag  = False
+                self.print_flag  = False       
             drug_emb_masked, AttenScorMat_DrugSelf  = self.TransformerEncoder(drug_embed, mask)# hidden_states:drug_embed.shape:torch.Size([bsz, 50, 128]); mask: ex_e_mask:torch.Size([bsz, 1, 1, 50])
             # drug_emb_masked: torch.Size([bsz, 50, 128]) 
             # attention_probs_0 = nn.Softmax(dim=-1)(attention_scores) # attention_probs_0:torch.Size([bsz, 8, 50, 50])(without dropout)
+            """需要所有層時，才手動計算
+            drug_emb_masked_all_layer, AttenScorMat_DrugSelf_all_layer = self.TransformerEncoder.compute_all_layers(drug_embed, mask)    
+            """
         elif Drug_SelfAttention is None:
                 print("\n Drug_SelfAttention is assign to None , please assign to False or True \n")
 
@@ -691,7 +707,10 @@ class Omics_DCSA_Model(nn.Module):
         
         append_embeddings, AttenScorMat_DrugCellSelf  = self.Drug_Cell_SelfAttention(append_embeddings, DrugCell_mask)# DrugCell_mask.shape: torch.Size([bsz, 50+c])
         # append_embeddings: torch.Size([bsz, 50+c, 136]) # AttenScorMat_DrugCellSelf:torch.Size([bsz, 8, 50+c, 50+c])(without dropout)
-
+        """需要所有層時，才手動計算
+        append_embeddings_all_layer, AttenScorMat_DrugCellSelf_all_layer = self.Drug_Cell_SelfAttention.compute_all_layers(append_embeddings, DrugCell_mask)    
+        
+        """
         #skip connect the omics embeddings # not as necessary as skip connect the drug embeddings 
         append_embeddings = torch.cat([ torch.cat(omic_embeddings_ls, dim=1), append_embeddings.reshape(append_embeddings.size(0), -1)], dim=1) # dim=1: turn into 1D 
         #omic_embeddings_ls(bsz, c, 128) + append_embeddings(bsz, 50+c, 136) => ( bsz, (50+c)*136+ c*128 )

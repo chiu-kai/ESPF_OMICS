@@ -198,11 +198,11 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     if model_name == "Omics_DrugESPF_Model":
         model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-                            TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+                            n_layer, TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
     elif model_name == "Omics_DCSA_Model":
         model = Omics_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-                            TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+                            n_layer, TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
 
     model.to(device=device)
 
@@ -324,11 +324,11 @@ if criterion.regular_type is not None:
 if model_name == "Omics_DrugESPF_Model":
     model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                         drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-                        TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+                        n_layer,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
 elif model_name == "Omics_DCSA_Model":
     model = Omics_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                         drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-                        TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+                        n_layer,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
 
 # model.to(device=device)
 num_param = sum([param.nelement() for param in model.parameters()])
