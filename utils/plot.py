@@ -157,6 +157,30 @@ def Density_Plot_of_AUC_Values(datasets,hyperparameter_folder_path=None):
         fig.savefig(f'{hyperparameter_folder_path}/Density_Plot_of_AUC_Values')
     return plt
 
+def Confusion_Matrix_plot(datasets,hyperparameter_folder_path=None):
+    plt.rcParams["font.family"] = "serif"
+    fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+    for i, (cm, title, color) in enumerate(datasets):
+        sns.heatmap(cm, annot=True, fmt='d', annot_kws={"size": 16, "weight": "bold"}, 
+                    cmap=color, cbar=False, vmin=0, vmax=max(cm.max() * 1.3, 1), linewidths=0,
+                    xticklabels=["Predicted  0", "Predicted  1"], yticklabels=["Actual  0", "Actual  1"], ax=axs[i])
+        axs[i].set_title(f'{title} Set',fontsize=16, fontweight='bold')
+        for spine in axs[i].spines.values():
+            spine.set_visible(True)
+            spine.set_linewidth(0.8)
+            spine.set_edgecolor('black')
+        # Make x and y tick labels bold
+        axs[i].tick_params(axis='x', labelsize=12, labelrotation=0)
+        axs[i].tick_params(axis='y', labelsize=12, labelrotation=0)
+        for label in axs[i].get_xticklabels() + axs[i].get_yticklabels():
+            label.set_fontweight('bold')
+    # Set a global title and save the figure
+    fig.suptitle('Confusion Matrix for Train, Val, and Test Sets', fontsize=20, fontweight='bold')
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    if hyperparameter_folder_path is not None:
+        fig.savefig(f'{hyperparameter_folder_path}/Confusion_Matrix')
+    return plt
+
 
 
 

@@ -313,6 +313,19 @@ class Encoder_MultipleLayers(nn.Module): # 用Encoder更新representation n_laye
             attentippend(attention_probs)
         return embeddings_all_layers, attention_probs_all_layers
 
+ 
+# class MLPBinaryClassifier(nn.Module):
+#     def __init__(self, input_size, hidden_size):
+#         super(MLPBinaryClassifier, self).__init__()
+#         self.fc1 = nn.Linear(input_size, hidden_size)
+#         self.fc2 = nn.Linear(hidden_size, 1)  # No sigmoid here
+
+#     def forward(self, x):
+#         x = F.relu(self.fc1(x))
+#         x = self.fc2(x)  # No sigmoid
+#         return x  # Raw logits
+# Use BCEWithLogitsLoss instead of BCELoss
+# criterion = nn.BCEWithLogitsLoss()      
         
 class CrossAttention(nn.Module): # substructures 和 pathways 的 cross-attention
     def __init__(self, drug_dim, cell_dim, attn_dim):

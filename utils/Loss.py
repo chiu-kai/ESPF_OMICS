@@ -1,62 +1,28 @@
 import torch
 import torch.nn as nn
 
-class FocalMSELoss(nn.Module):
-    def __init__(self, alpha=8.0, gamma=1.0, regular_type=None, regular_lambda=1e-05):
-        super(FocalMSELoss, self).__init__()
+class FocalLoss(nn.Module):
+    def __init__(self, loss_type="", alpha=8.0, gamma=1.0, regular_type=None, regular_lambda=1e-05):
+        super(FocalLoss, self).__init__()
+        self.loss_type = loss_type
         self.alpha = alpha
         self.gamma = gamma
         self.regular_type = regular_type
         self.regular_lambda = regular_lambda
         self.penalty_value = None
-        self.loss_type="FocalMSELoss"
-
-    def forward(self, y_pred, y_true, model=None, weights=None):
-        error = torch.abs(y_true - y_pred)
-        weight = (1 - torch.exp(-self.alpha * error)) ** self.gamma  # Weight function
-        self.loss_WO_penalty = (weight * (error ** 2)).mean()  # Weighted MSE
-        
-        self.loss = self.loss_WO_penalty
-        # Add regularization penalty if specified
-        if self.regular_type and model:
-            if self.regular_type == "L1":
-                reg_penalty = sum(p.abs().sum() for p in model.parameters())
-            elif self.regular_type == "L2":
-                reg_penalty = sum(p.pow(2).sum() for p in model.parameters())
-            elif self.regular_type == "L1+L2":
-                reg_penalty = sum(p.abs().sum() + p.pow(2).sum() for p in model.parameters())
-            else:
-                raise ValueError(f"Unsupported regularization type: {self.regular_type}")
-            self.penalty_value = self.regular_lambda * reg_penalty 
-            self.loss += self.penalty_value
-        return self.loss
-
-    def __repr__(self):
-        return (f"FocalMSELoss(alpha={self.alpha},gamma={self.gamma}),"
-                f"regular_type={self.regular_type}, "
-                f"regular_lambda={self.regular_lambda})"
-                f"penalty_value={self.penalty_value}\n")
     
-class FocalMAELoss(nn.Module):
-    def __init__(self, alpha=8.0, gamma=1.0, regular_type=None, regular_lambda=1e-05):
-        super(FocalMAELoss, self).__init__()
-        self.alpha = alpha
-        self.gamma = gamma
-        self.regular_type = regular_type
-        self.regular_lambda = regular_lambda
-        self.penalty_value = None
-        self.loss_type="FocalMAELoss"
-
     def forward(self, y_pred, y_true, model=None, weights=None):
-        '''
-        weights: give more weight to few sample (AUC small sample)
-        weight: Focalloss give more weights to big loss
-        '''
         error = torch.abs(y_true - y_pred)
         weight = (1 - torch.exp(-self.alpha * error)) ** self.gamma  # Weight function
-        self.loss_WO_penalty = (weight * error).mean()  # Weighted MAE
         
-        self.loss = self.loss_WO_penalty
+        if self.loss_type == "MSE":
+            loss_wo_penalty = (weight * (error ** 2)).mean()  # Weighted MSE
+        elif self.loss_type == "MAE":
+            loss_wo_penalty = (weight * error).mean()  # Weighted MAE
+        else:
+            raise ValueError(f"Unsupported Loss type: {self.loss_type}")
+
+        loss = loss_wo_penalty
         # Add regularization penalty if specified
         if self.regular_type and model:
             if self.regular_type == "L1":
@@ -67,36 +33,33 @@ class FocalMAELoss(nn.Module):
                 reg_penalty = sum(p.abs().sum() + p.pow(2).sum() for p in model.parameters())
             else:
                 raise ValueError(f"Unsupported regularization type: {self.regular_type}")
-            self.penalty_value = self.regular_lambda * reg_penalty 
-            self.loss += self.penalty_value
-        return self.loss
-
+            self.penalty_value = self.regular_lambda * reg_penalty
+            loss += self.penalty_value
+        
+        return loss
+    
     def __repr__(self):
-        return (f"FocalMAELoss(alpha={self.alpha},gamma={self.gamma}),"
-                f"regular_type={self.regular_type}, "
-                f"regular_lambda={self.regular_lambda})"
-                f"penalty_value={self.penalty_value}\n")
+        return (f"FocalLoss(loss_type={self.loss_type}, alpha={self.alpha}, gamma={self.gamma}, "
+                f"regular_type={self.regular_type}, regular_lambda={self.regular_lambda}, "
+                f"penalty_value={self.penalty_value})")
 
 # Example usage:
-# criterion = FocalHuberLoss(delta=0.2, alpha=0.3, gamma=2.0, regular_type=None, regular_lambda=1e-05)
+# criterion = FocalHuberLoss(loss_type="FocalHuberLoss",delta=0.2, alpha=0.3, gamma=2.0, regular_type=None, regular_lambda=1e-05)
 class FocalHuberLoss(nn.Module):
-    def __init__(self, delta=0.2, alpha=1.0, gamma=2.0, regular_type=None, regular_lambda=1e-05):
-        """
-        Focal Huber Loss for regression.
-
-        Args:
-        - delta: Huber threshold.
-        - alpha: Controls how fast weight decays for easy samples.
-        - gamma: Controls focus on hard samples.
-        """
+    def __init__(self,loss_type="FocalHuberLoss", delta=0.2, alpha=1.0, gamma=2.0, regular_type=None, regular_lambda=1e-05):
+        """Focal Huber Loss for regression.
+                Args:
+                - delta: Huber threshold.
+                - alpha: Controls how fast weight decays for easy samples.
+                - gamma: Controls focus on hard samples."""
         super(FocalHuberLoss, self).__init__()
+        self.loss_type=loss_type
         self.delta = delta
         self.alpha = alpha
         self.gamma = gamma
         self.regular_type = regular_type
         self.regular_lambda = regular_lambda
         self.penalty_value = None
-        self.loss_type="FocalHuberLoss"
 
     def forward(self, y_pred, y_true, model=None, weights=None):
         error = torch.abs(y_true - y_pred)
@@ -149,7 +112,7 @@ class Custom_Weighted_LossFunction(nn.Module):
             prediction (Tensor): The model's predictions.
             target (Tensor): The ground truth values.
             model (nn.Module, optional): The model for calculating regularization penalties.
-            weights (Tensor, optional): Weights for each sample in the batch.
+            weights (Tensor, optional): Weights for each sample in the batch. Give more weight to few samples.
         Returns:
             Tensor: The computed loss.
         """
@@ -223,6 +186,8 @@ class Custom_LossFunction(nn.Module):
 
         self.mse_loss = nn.MSELoss() # reduction (default 'mean')
         self.mae_loss = nn.L1Loss() # reduction (default 'mean')
+        self.bce_loss = nn.BCELoss() # reduction (default 'mean')
+
     def forward(self, prediction, target, model=None, weights=None):
         """
         Compute the loss based on the specified loss type and regularization.
@@ -239,6 +204,13 @@ class Custom_LossFunction(nn.Module):
             self.loss_WO_penalty = self.mse_loss(prediction, target)
         elif self.loss_type == "MAE":
             self.loss_WO_penalty = self.mae_loss(prediction, target)
+        elif self.loss_type == "BCE": # sigmoid is already done in model
+            self.loss_WO_penalty = self.bce_loss(prediction, target)
+        
+        elif self.loss_type == "MAE+BCE":
+            mae = self.mae_loss(prediction, target)
+            bce = self.bce_loss(prediction, target)
+            self.loss_WO_penalty = mae + self.loss_lambda * bce
         elif self.loss_type == "MAE+MSE":
             mae = self.mae_loss(prediction, target)
             mse = self.mse_loss(prediction, target)

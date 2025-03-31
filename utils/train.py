@@ -108,7 +108,7 @@ def evaluation(model, eval_epoch_loss_W_penalty_ls, eval_epoch_loss_WO_penalty_l
             
             predAUCwithUnknownGT.append(outputs.detach().cpu().numpy().reshape(-1))# for unknown GroundTruth
             outputs = outputs[mask] #dtype = 'float32'
-
+            
             eval_outputs.append(outputs.detach().reshape(-1)) #dtype = 'float32' # [tensor]
             eval_targets.append(target.detach().reshape(-1)) # [tensor]
             if outputcontrol != 'plotLossCurve':

@@ -25,8 +25,9 @@ from utils.split_data_id import split_id,repeat_func
 from utils.create_dataloader import OmicsDrugDataset
 from utils.train import train, evaluation
 from utils.correlation import correlation_func
-from utils.plot import loss_curve, correlation_density,Density_Plot_of_AUC_Values
+from utils.plot import loss_curve, correlation_density, Density_Plot_of_AUC_Values, Confusion_Matrix_plot
 from utils.tools import get_data_value_range,set_seed,get_vram_usage
+
 
 # 設定命令列引數
 parser = argparse.ArgumentParser(description="import config to main")
@@ -44,14 +45,12 @@ for key, value in vars(config).items():
 device = (torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'))
 print(f"Training on device {device}.")
 
-
-
 # 檢查exp和AUC的samples是否一致
 exp_df = pd.read_csv(omics_files["Exp"], sep=',', index_col=0)
-AUC_df = pd.read_csv(AUC_df_path, sep=',', index_col=0)
+AUC_df_numerical = pd.read_csv(AUC_df_path_numerical, sep=',', index_col=0)
 print(f"exp_df samples: {len(exp_df.index)}")
-print(f"AUC_df samples: {len(AUC_df.index)}")
-matched_samples = sorted(set(AUC_df.index) & set(exp_df.index))
+print(f"AUC_df_numerical samples: {len(AUC_df_numerical.index)}")
+matched_samples = sorted(set(AUC_df_numerical.index) & set(exp_df.index))
 
 # 讀取omics資料
 set_seed(seed)
@@ -74,11 +73,19 @@ for omic_type in include_omics:
 
 drug_df = pd.read_csv( drug_df_path, sep=',', index_col=0)
 print(drug_df.shape)
-print(AUC_df.shape)
+print("AUC_df_numerical",AUC_df_numerical.shape)
 # matched AUCfile and omics_data samples
-AUC_df= (AUC_df.loc[matched_samples])
-print("AUC_df",AUC_df.shape)
-    
+AUC_df_numerical= (AUC_df_numerical.loc[matched_samples])
+print("AUC_df_numerical match samples",AUC_df_numerical.shape)
+median_value = np.nanmedian(AUC_df_numerical.values)  # Directly calculate median, ignoring NaNs
+print("median_value",median_value)    
+if criterion.loss_type == "BCE":
+    AUC_df = pd.read_csv(AUC_df_path, sep=',', index_col=0).loc[matched_samples] # binary data
+    print("AUC_df",AUC_df.shape)
+else:
+    AUC_df = AUC_df_numerical.copy()
+del AUC_df_numerical
+
 if AUCtransform == "-log2":
     AUC_df = -np.log2(AUC_df)
 if AUCtransform == "-log10":
@@ -138,7 +145,7 @@ num_drug = drug_encode.shape[0]
 print("num_ccl,num_drug: ",num_ccl,num_drug)
 
 # Convert your data to tensors if they're in numpy
-AUC_df = AUC_df.apply(pd.to_numeric, errors='coerce')# Ensure all values are numeric, coercing non-numeric ones to NaN
+# AUC_df = AUC_df.apply(pd.to_numeric, errors='coerce')# Ensure all values are numeric, coercing non-numeric ones to NaN
 response_matrix_tensor = torch.tensor(AUC_df.values, dtype=torch.float32).to(device)
 print(response_matrix_tensor.shape)
 print(drug_encode.values[0][2])
@@ -194,11 +201,11 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     if model_name == "Omics_DrugESPF_Model":
         model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-                            TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+                            n_layer,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
     elif model_name == "Omics_DCSA_Model":
         model = Omics_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-                            TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+                            n_layer,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
 
     model.to(device=device)
 
@@ -223,8 +230,8 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
                            'val': BE_val_loss,  # best epoch
                            'test': None,  # Placeholder for test loss
                           }   
-    val_metrics = metrics_calculator(torch.cat(BE_val_targets), torch.cat(BE_val_outputs))
-    train_metrics = metrics_calculator(torch.cat(BE_train_targets), torch.cat(BE_train_outputs))
+    val_metrics = metrics_calculator(torch.cat(BE_val_targets), torch.cat(BE_val_outputs),median_value)
+    train_metrics = metrics_calculator(torch.cat(BE_train_targets), torch.cat(BE_train_outputs),median_value)
 
     kfold_metrics[fold] = {'train': train_metrics, 'val': val_metrics, 'test': None 
                            }   
@@ -239,7 +246,7 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
                                         weighted_threshold, few_weight, more_weight, 
                                         outputcontrol='correlation')
     
-    test_metrics = metrics_calculator(torch.cat(BE_test_targets), torch.cat(BE_test_outputs))
+    test_metrics = metrics_calculator(torch.cat(BE_test_targets), torch.cat(BE_test_outputs),median_value)
 
     kfold_losses[fold]['test'] = test_loss_WO_penalty
     kfold_metrics[fold]['test'] = test_metrics
@@ -270,7 +277,7 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     # Empty PyTorch cache
     torch.cuda.empty_cache() # model 會從GPU消失，所以要evaluation時要重新load model
 # Saving the model weughts
-hyperparameter_folder_path = f'./results_GDSC/BF{BF}_test_loss{BF_test_loss:.7f}_BestValEpo{BF_best_epoch}_{hyperparameter_folder_part}' # /root/Winnie/PDAC
+hyperparameter_folder_path = f'./results_GDSC/BF{BF}_{criterion.loss_type}_test_loss{BF_test_loss:.7f}_BestValEpo{BF_best_epoch}_{hyperparameter_folder_part}' # /root/Winnie/PDAC
 os.makedirs(hyperparameter_folder_path, exist_ok=True)
 save_path = os.path.join(hyperparameter_folder_path, f'BestValWeight.pt')
 torch.save(BF_best_weight, save_path)
@@ -287,27 +294,29 @@ if criterion.regular_type is not None:
 
 
 
-# calculate correlation
-(train_pearson, train_spearman,
-train_AllSameValuesList_count) = correlation_func(splitType, AUC_df.values,AUC_df.index,AUC_df.columns,
-                                                  BF_id_unrepeat_train, 
-                                                  torch.cat(BF_train_targets), torch.cat(BF_train_outputs))
 
-(val_pearson, val_spearman,
-val_AllSameValuesList_count) = correlation_func(splitType, AUC_df.values,AUC_df.index,AUC_df.columns,
-                                                BF_id_unrepeat_val, 
-                                                torch.cat(BF_val_targets), torch.cat(BF_val_outputs))
+if criterion.loss_type != "BCE":
+    # calculate correlation
+    (train_pearson, train_spearman,
+    train_AllSameValuesList_count) = correlation_func(splitType, AUC_df.values,AUC_df.index,AUC_df.columns,
+                                                    BF_id_unrepeat_train, 
+                                                    torch.cat(BF_train_targets), torch.cat(BF_train_outputs))
+
+    (val_pearson, val_spearman,
+    val_AllSameValuesList_count) = correlation_func(splitType, AUC_df.values,AUC_df.index,AUC_df.columns,
+                                                    BF_id_unrepeat_val, 
+                                                    torch.cat(BF_val_targets), torch.cat(BF_val_outputs))
 
 
-(test_pearson, test_spearman,
-test_AllSameValuesList_count) = correlation_func(splitType, AUC_df.values,AUC_df.index,AUC_df.columns,
-                                                 id_unrepeat_test, 
-                                                 torch.cat(BF_test_targets), torch.cat(BF_test_outputs))
-#--------------------------------------------------------------------------------------------------------------------------
-#plot correlation_density
-correlation_density(model_name,train_pearson,val_pearson,test_pearson,
-                    train_spearman,val_spearman,test_spearman, 
-                    hyperparameter_folder_path)
+    (test_pearson, test_spearman,
+    test_AllSameValuesList_count) = correlation_func(splitType, AUC_df.values,AUC_df.index,AUC_df.columns,
+                                                    id_unrepeat_test, 
+                                                    torch.cat(BF_test_targets), torch.cat(BF_test_outputs))
+    #--------------------------------------------------------------------------------------------------------------------------
+    #plot correlation_density
+    correlation_density(model_name,train_pearson,val_pearson,test_pearson,
+                        train_spearman,val_spearman,test_spearman, 
+                        hyperparameter_folder_path)
 
 # get range of GroundTruth AUC and predicted AUC distribution
 predicted_AUC = torch.cat( BF_train_outputs + BF_val_outputs + BF_test_outputs)
@@ -326,6 +335,21 @@ Density_Plot_of_AUC_Values(datas,hyperparameter_folder_path)
 #----------------------------------------------------------------------------------
 
 #--------------------------------------------------------------------------------------------------------------------------
+
+
+if criterion.loss_type == "BCE":
+    (train_cm , train_GT_0_count, train_GT_1_count, 
+    train_pred_binary_0_count, train_pred_binary_1_count) =metrics_calculator.confusion_matrix(torch.cat(BF_train_targets), torch.cat(BF_train_outputs), median_value)
+    (val_cm ,  val_GT_0_count, val_GT_1_count, 
+    val_pred_binary_0_count, val_pred_binary_1_count ) =metrics_calculator.confusion_matrix(torch.cat(BF_val_targets), torch.cat(BF_val_outputs), median_value)
+    (test_cm ,  test_GT_0_count, test_GT_1_count, 
+    test_pred_binary_0_count, test_pred_binary_1_count ) =metrics_calculator.confusion_matrix(torch.cat(BF_test_targets), torch.cat(BF_test_outputs), median_value)
+
+    # plot confusion matrix
+    cm_datas = [(train_cm, 'Train', 'Reds'),  (val_cm, 'Validation', 'Greens'),   (test_cm, 'Test', 'Blues')]
+    Confusion_Matrix_plot(cm_datas,hyperparameter_folder_path=hyperparameter_folder_path)
+
+
 output_file = f"{hyperparameter_folder_path}/BF{BF}_result_performance.txt"
 with open(output_file, "w") as file:
     # data range
@@ -333,7 +357,7 @@ with open(output_file, "w") as file:
     get_data_value_range(predicted_AUC.tolist(),"predicted_AUC", file=file)
 
     file.write(f'\nhyperparameter_print\n{hyperparameter_print}')
-    #----------------After Training-------------- #驗證與Evaluation是否一致
+    
     file.write(f'kfold_losses:\n {kfold_losses}\n')# all fold loss on each set
 
     file.write(f'criterion: {criterion.loss_type}, weight_regularization: {criterion.regular_type}, regular_lambda: {criterion.regular_lambda}, penalty_value:{criterion.penalty_value}\n\n')
@@ -341,12 +365,11 @@ with open(output_file, "w") as file:
     for set in ['train', 'val', 'test']:
         Folds_losses = [loss[set] for loss in kfold_losses.values()]
         file.write(f"Average KFolds Model {set.capitalize()} {criterion.loss_type}: {np.mean(Folds_losses):.6f} ± {np.std(Folds_losses):.6f}\n")
-
+    
     for type in metrics_type_set:
         for set in ['train', 'val', 'test']:
             Folds_values = [value[set][type] for value in kfold_metrics.values()]
             file.write(f"Average KFolds Model {set.capitalize()} {type}: {torch.mean(torch.stack(Folds_values)):.6f} ± {torch.std(torch.stack(Folds_values)):.6f}\n")
-
 
     file.write(f'BF: {BF}\n')
     file.write(f'BF_best_epoch: {BF_best_epoch}\n')
@@ -355,72 +378,61 @@ with open(output_file, "w") as file:
     file.write(f"Best fold {BF} {criterion.loss_type} val Loss: {BF_BE_val_loss:.7f}\n") # = (kfold_losses[BF]['val'])
     file.write(f"Best fold {BF} {criterion.loss_type} test Loss: {BF_test_loss:.7f}\n") # = (kfold_losses[BF]['test'])
 
-    # Metrics
-    # for key in train_metrics.keys():
-    #         for name, metrics in [("Train_set", train_metrics), ("val_set", val_metrics), ("test_set", test_metrics)]:
-    #             file.write(f"Metrics {name} {key} : {metrics[key]:.6f}\n")
+
     for type in metrics_type_set:
         for set in ['train', 'val', 'test']:
             BFolds_value = [value[set][type] for value in kfold_metrics.values()][BF]
             file.write(f"Best Fold {BF} {set.capitalize()} {type}: {BFolds_value:.7f}\n")
-
-# Pearson and Spearman statistics
-    # <=0的都=0
-    train_pearson = np.maximum( 0, np.array(train_pearson) )
-    val_pearson = np.maximum( 0, np.array(val_pearson) )
-    test_pearson = np.maximum( 0, np.array(test_pearson) )
-    train_spearman = np.maximum( 0, np.array(train_spearman) )
-    val_spearman = np.maximum( 0, np.array(val_spearman) )
-    test_spearman = np.maximum( 0, np.array(test_spearman) )
-
     
-    # for name, pearson in [("Train", train_pearson),  ("Validation", val_pearson),   ("Test", test_pearson)]:
-    #     file.write(f"Mean {name} Pearson: {np.mean(pearson):.6f} ± {np.std(pearson):.4f}\n")
-    #     file.write(f"Skewness {name} Pearson: {stats.skew(pearson, bias=False, nan_policy='raise'):.6f}\n")
-    #     file.write(f"Median {name} Pearson: {np.median(pearson):.6f}\n")
-    #     file.write(f"Mode {name} Pearson: {stats.mode(np.round(pearson,2))[0]}, count={stats.mode(np.round(pearson,2))[1]}\n")
-    results = {"Mean": [], "Median": [], "Mode": [], "Skewness": []}
-    for name, pearson in [("Train", train_pearson), ("Validation", val_pearson), ("Test", test_pearson)]:
-        results["Mean"].append(f"Mean {name} Pearson: {np.mean(pearson):.6f} ± {np.std(pearson):.4f}")
-        results["Median"].append(f"Median {name} Pearson: {np.median(pearson):.6f}")
+    if criterion.loss_type == "BCE":
+        file.write(f"Best Fold {BF} Train TP TN FP FN: {train_cm[1,1]}_{train_cm[0,0]}_{train_cm[0,1]}_{train_cm[1,0]}\n"
+                   f"Best Fold {BF} Val TP TN FP FN: {val_cm[1,1]}_{val_cm[0,0]}_{val_cm[0,1]}_{val_cm[1,0]}\n"
+                   f"Best Fold {BF} Test TP TN FP FN: {test_cm[1,1]}_{test_cm[0,0]}_{test_cm[0,1]}_{test_cm[1,0]}\n"
+                   f"Best Fold {BF} Train GT_count_0_1: {train_GT_0_count}_{train_GT_1_count}\n"
+                   f"Best Fold {BF} Train pred_binary_count_0_1: {train_pred_binary_0_count}_{train_pred_binary_1_count}\n"
+                   f"Best Fold {BF} Val GT_count_0_1: {val_GT_0_count}_{val_GT_1_count}\n"
+                   f"Best Fold {BF} Val pred_binary_count_0_1:{val_pred_binary_0_count}_{val_pred_binary_1_count}\n"
+                   f"Best Fold {BF} Test GT_count_0_1:{test_GT_0_count}_{test_GT_1_count}\n"
+                   f"Best Fold {BF} Test pred_binary_count_0_1:{test_pred_binary_0_count}_{test_pred_binary_1_count}\n")
+                    
+    else:
+    # Pearson and Spearman statistics
+        # <=0的都=0
+        train_pearson = np.maximum( 0, np.array(train_pearson) )
+        val_pearson = np.maximum( 0, np.array(val_pearson) )
+        test_pearson = np.maximum( 0, np.array(test_pearson) )
+        train_spearman = np.maximum( 0, np.array(train_spearman) )
+        val_spearman = np.maximum( 0, np.array(val_spearman) )
+        test_spearman = np.maximum( 0, np.array(test_spearman) )
 
-        mode_value, mode_count = stats.mode(np.round(pearson, 2), keepdims=True)
-        results["Mode"].append(f"Mode {name} Pearson: {mode_value[0]} count={mode_count[0]}")
+        results = {"Mean": [], "Median": [], "Mode": [], "Skewness": []}
+        for name, pearson in [("Train", train_pearson), ("Validation", val_pearson), ("Test", test_pearson)]:
+            results["Mean"].append(f"Mean {name} Pearson: {np.mean(pearson):.6f} ± {np.std(pearson):.4f}")
+            results["Median"].append(f"Median {name} Pearson: {np.median(pearson):.6f}")
 
-        results["Skewness"].append(f"Skewness {name} Pearson: {stats.skew(pearson, bias=False, nan_policy='raise'):.6f}")
-    file.write("\n".join("\n".join(v) for v in results.values()) + "\n")
+            mode_value, mode_count = stats.mode(np.round(pearson, 2), keepdims=True)
+            results["Mode"].append(f"Mode {name} Pearson: {mode_value[0]} count={mode_count[0]}")
 
-    # for name, spearman in [("Train", train_spearman), ("Validation", val_spearman), ("Test", test_spearman)]:
-    #     file.write(f"Mean {name} Spearman : {np.mean(spearman):.6f} ± {np.std(spearman):.4f}\n")
-    #     file.write(f"Skewness {name} Spearman : {stats.skew(spearman, bias=False, nan_policy='raise'):.6f}\n")
-    #     file.write(f"Median {name} Spearman : {np.median(spearman):.6f}\n")
-    #     file.write(f"Mode {name} Spearman : {stats.mode(np.round(spearman,2))[0]}, count={stats.mode(np.round(spearman,2))[1]}\n")
-    results = {"Mean": [], "Median": [], "Mode": [], "Skewness": []}
-    for name, spearman in [("Train", train_spearman), ("Validation", val_spearman), ("Test", test_spearman)]:
-        results["Mean"].append(f"Mean {name} spearman: {np.mean(spearman):.6f} ± {np.std(spearman):.4f}")
-        results["Median"].append(f"Median {name} spearman: {np.median(spearman):.6f}")
+            results["Skewness"].append(f"Skewness {name} Pearson: {stats.skew(pearson, bias=False, nan_policy='raise'):.6f}")
+        file.write("\n".join("\n".join(v) for v in results.values()) + "\n")
 
-        mode_value, mode_count = stats.mode(np.round(spearman, 2), keepdims=True)
-        results["Mode"].append(f"Mode {name} spearman: {mode_value[0]} count={mode_count[0]}")
+        results = {"Mean": [], "Median": [], "Mode": [], "Skewness": []}
+        for name, spearman in [("Train", train_spearman), ("Validation", val_spearman), ("Test", test_spearman)]:
+            results["Mean"].append(f"Mean {name} spearman: {np.mean(spearman):.6f} ± {np.std(spearman):.4f}")
+            results["Median"].append(f"Median {name} spearman: {np.median(spearman):.6f}")
 
-        results["Skewness"].append(f"Skewness {name} spearman: {stats.skew(spearman, bias=False, nan_policy='raise'):.6f}")
-    file.write("\n".join("\n".join(v) for v in results.values()) + "\n")
+            mode_value, mode_count = stats.mode(np.round(spearman, 2), keepdims=True)
+            results["Mode"].append(f"Mode {name} spearman: {mode_value[0]} count={mode_count[0]}")
 
-    # check All Same Predicted Values Item_Count in {name}set # EX: 一個藥對應每個ccl時，輸出值都一樣
-    for name, AllSameValuesList_count in [("Train", train_AllSameValuesList_count),
-                                    ("Validation", val_AllSameValuesList_count),
-                                    ("Test", test_AllSameValuesList_count)]:
-        file.write(f"All Same Predicted Values Item_Count in {name}set: {AllSameValuesList_count}\n")
+            results["Skewness"].append(f"Skewness {name} spearman: {stats.skew(spearman, bias=False, nan_policy='raise'):.6f}")
+        file.write("\n".join("\n".join(v) for v in results.values()) + "\n")
 
-    # for name, pearson in [("Train", train_pearson),
-    #                                 ("Validation", val_pearson),
-    #                                 ("Test", test_pearson)]:
-    #     file.write(f"Mean Median Mode {name} Pearson {model_name}:\t{np.mean(pearson):.6f} ± {np.std(pearson):.4f}\t{stats.skew(pearson, bias=False, nan_policy='raise'):.6f}\t {np.median(pearson):.6f}\t{stats.mode(np.round(pearson,2))}\n")
-    # for name, spearman in [("Train", train_spearman),
-    #                                 ("Validation", val_spearman),
-    #                                 ("Test", test_spearman)]:
-    #     file.write(f"Mean Median Mode {name} Spearman {model_name}:\t{np.mean(spearman):.6f} ± {np.std(spearman):.4f}\t{stats.skew(spearman, bias=False, nan_policy='raise'):.6f}\t {np.median(spearman):.6f}\t{stats.mode(np.round(spearman,2))}\n")
-    
+        # check All Same Predicted Values Item_Count in {name}set # EX: 一個藥對應每個ccl時，輸出值都一樣
+        for name, AllSameValuesList_count in [("Train", train_AllSameValuesList_count),
+                                        ("Validation", val_AllSameValuesList_count),
+                                        ("Test", test_AllSameValuesList_count)]:
+            file.write(f"All Same Predicted Values Item_Count in {name}set: {AllSameValuesList_count}\n")
+
     file.write(f"BF_test_targets\n{BF_test_targets[0][:10]}\n")
     file.write(f"BF_test_outputs_before_final_activation_list\n{BF_test_outputs_before_final_activation_list[0][:10]}\n")
     file.write(f"BF_test_outputs\n{BF_test_outputs[0][:10]}\n")
