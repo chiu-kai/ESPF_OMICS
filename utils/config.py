@@ -1,7 +1,7 @@
 # pip install subword-nmt seaborn lifelines openpyxl matplotlib scikit-learn openTSNE
 # python3 ./main_kfold.py --config utils/config.py
 import torch.nn as nn
-from utils.Loss import Custom_LossFunction,Custom_Weighted_LossFunction,FocalMSELoss
+from utils.Loss import Custom_LossFunction,Custom_Weighted_LossFunction,FocalLoss
 from utils.Custom_Activation_Function import ScaledSigmoid, ReLU_clamp
 from utils.Metrics import MetricsCalculator_nntorch
 

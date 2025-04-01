@@ -227,8 +227,8 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
                            'val': BE_val_loss,  # best epoch
                            'test': None,  # Placeholder for test loss
                           }   
-    val_metrics = metrics_calculator(torch.cat(BE_val_targets), torch.cat(BE_val_outputs))
-    train_metrics = metrics_calculator(torch.cat(BE_train_targets), torch.cat(BE_train_outputs))
+    val_metrics = metrics_calculator(torch.cat(BE_val_targets), torch.cat(BE_val_outputs),median_value=None)
+    train_metrics = metrics_calculator(torch.cat(BE_train_targets), torch.cat(BE_train_outputs),median_value=None)
 
     kfold_metrics[fold] = {'train': train_metrics, 'val': val_metrics, 'test': None 
                            }   
@@ -243,7 +243,7 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
                                         weighted_threshold, few_weight, more_weight, 
                                         outputcontrol='correlation')
     
-    test_metrics = metrics_calculator(torch.cat(BE_test_targets), torch.cat(BE_test_outputs))
+    test_metrics = metrics_calculator(torch.cat(BE_test_targets), torch.cat(BE_test_outputs),median_value=None)
 
     kfold_losses[fold]['test'] = test_loss_WO_penalty
     kfold_metrics[fold]['test'] = test_metrics
