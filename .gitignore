@@ -13,3 +13,5 @@ main.py
 main_kfold_old.py
 MACCS166/
 GDSC_prediction.ipynb
+config.py
+config_GDSC.py
