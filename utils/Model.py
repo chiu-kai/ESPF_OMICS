@@ -292,7 +292,7 @@ class Encoder(nn.Module):  # Transformer Encoder for drug feature # Drug_SelfAtt
 
 class Encoder_MultipleLayers(nn.Module): # 用Encoder更新representation n_layer次 # DeepTTA paper寫6次
     def __init__(self, hidden_size, intermediate_size,
-                 num_attention_heads, attention_probs_dropout_prob, hidden_dropout_prob, n_layer=3): #(128, 512, 8, 0.1, 0.1, 6)
+                 num_attention_heads, attention_probs_dropout_prob, hidden_dropout_prob, n_layer): #(128, 512, 8, 0.1, 0.1, 6)
         super(Encoder_MultipleLayers, self).__init__()
         layer = Encoder(hidden_size, intermediate_size, num_attention_heads,
                         attention_probs_dropout_prob, hidden_dropout_prob) # (128,512,8,0.1,0.1)
@@ -310,7 +310,7 @@ class Encoder_MultipleLayers(nn.Module): # 用Encoder更新representation n_laye
         for layer_module in self.layers:
             hidden_states, attention_probs = layer_module(hidden_states, attention_mask)
             embeddings_all_layers.append(hidden_states)
-            attentippend(attention_probs)
+            attention_probs_all_layers.append(attention_probs)
         return embeddings_all_layers, attention_probs_all_layers
 
  
@@ -528,7 +528,7 @@ class Omics_DrugESPF_Model(nn.Module):
                 # attention_probs_0 = nn.Softmax(dim=-1)(attention_scores) torch.Size([bsz, 8, 50, 50])(without dropout)
                 """需要所有層時，才手動計算
                 drug_emb_masked_all_layer, AttenScorMat_DrugSelf_all_layer = self.TransformerEncoder.compute_all_layers(drug_embed, mask)    
-                self.attention_probs = drug_emb_masked_all_layer[self.n_layer]
+                self.attention_probs_0  = drug_emb_masked_all_layer[self.n_layer-1]
                 """
                 self.attention_probs = attention_probs_0
             elif Drug_SelfAttention is None:
@@ -561,7 +561,7 @@ class Omics_DCSA_Model(nn.Module):
                  hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,n_layer, TCGA_pretrain_weight_path_dict=None):
         super(Omics_DCSA_Model, self).__init__()
         self.num_attention_heads = num_attention_heads
-
+        self.n_layer = n_layer
         def load_TCGA_pretrain_weight(model, pretrained_weights_path, device):
             state_dict = torch.load(pretrained_weights_path, map_location=device)  # Load the state_dict
             encoder_state_dict = {key[len("encoder."):]: value for key, value in state_dict.items() if key.startswith('encoder')}  # Extract encoder weights
@@ -689,9 +689,11 @@ class Omics_DCSA_Model(nn.Module):
                 self.print_flag  = False       
             drug_emb_masked, AttenScorMat_DrugSelf  = self.TransformerEncoder(drug_embed, mask)# hidden_states:drug_embed.shape:torch.Size([bsz, 50, 128]); mask: ex_e_mask:torch.Size([bsz, 1, 1, 50])
             # drug_emb_masked: torch.Size([bsz, 50, 128]) 
-            # attention_probs_0 = nn.Softmax(dim=-1)(attention_scores) # attention_probs_0:torch.Size([bsz, 8, 50, 50])(without dropout)
+            # AttenScorMat_DrugSelf = nn.Softmax(dim=-1)(attention_scores) # AttenScorMat_DrugSelf:torch.Size([bsz, 8, 50, 50])(without dropout)
             """需要所有層時，才手動計算
             drug_emb_masked_all_layer, AttenScorMat_DrugSelf_all_layer = self.TransformerEncoder.compute_all_layers(drug_embed, mask)    
+            AttenScorMat_DrugSelf = drug_emb_masked_all_layer[self.n_layer -1]
+            drug_emb_masked = drug_emb_masked_all_layer[self.n_layer -1] 
             """
         elif Drug_SelfAttention is None:
                 print("\n Drug_SelfAttention is assign to None , please assign to False or True \n")
@@ -722,7 +724,8 @@ class Omics_DCSA_Model(nn.Module):
         # append_embeddings: torch.Size([bsz, 50+c, 136]) # AttenScorMat_DrugCellSelf:torch.Size([bsz, 8, 50+c, 50+c])(without dropout)
         """需要所有層時，才手動計算
         append_embeddings_all_layer, AttenScorMat_DrugCellSelf_all_layer = self.Drug_Cell_SelfAttention.compute_all_layers(append_embeddings, DrugCell_mask)    
-        
+        AttenScorMat_DrugCellSelf = AttenScorMat_DrugCellSelf_all_layer[self.n_layer -1]
+        append_embeddings = append_embeddings_all_layer[self.n_layer -1] 
         """
         #skip connect the omics embeddings # not as necessary as skip connect the drug embeddings 
         append_embeddings = torch.cat([ torch.cat(omic_embeddings_ls, dim=1), append_embeddings.reshape(append_embeddings.size(0), -1)], dim=1) # dim=1: turn into 1D 

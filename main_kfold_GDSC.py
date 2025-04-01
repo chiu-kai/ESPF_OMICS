@@ -391,9 +391,9 @@ with open(output_file, "w") as file:
                    f"Best Fold {BF} Train GT_count_0_1: {train_GT_0_count}_{train_GT_1_count}\n"
                    f"Best Fold {BF} Train pred_binary_count_0_1: {train_pred_binary_0_count}_{train_pred_binary_1_count}\n"
                    f"Best Fold {BF} Val GT_count_0_1: {val_GT_0_count}_{val_GT_1_count}\n"
-                   f"Best Fold {BF} Val pred_binary_count_0_1:{val_pred_binary_0_count}_{val_pred_binary_1_count}\n"
-                   f"Best Fold {BF} Test GT_count_0_1:{test_GT_0_count}_{test_GT_1_count}\n"
-                   f"Best Fold {BF} Test pred_binary_count_0_1:{test_pred_binary_0_count}_{test_pred_binary_1_count}\n")
+                   f"Best Fold {BF} Val pred_binary_count_0_1: {val_pred_binary_0_count}_{val_pred_binary_1_count}\n"
+                   f"Best Fold {BF} Test GT_count_0_1: {test_GT_0_count}_{test_GT_1_count}\n"
+                   f"Best Fold {BF} Test pred_binary_count_0_1: {test_pred_binary_0_count}_{test_pred_binary_1_count}\n")
                     
     else:
     # Pearson and Spearman statistics

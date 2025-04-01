@@ -320,19 +320,19 @@ if criterion.regular_type is not None:
 # val_dataset = Subset(dataset, BF_id_val.tolist())
 # val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False) # , num_workers=4, pin_memory=True)
 
-# set_seed(seed)
-if model_name == "Omics_DrugESPF_Model":
-    model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
-                        drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-                        n_layer,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
-elif model_name == "Omics_DCSA_Model":
-    model = Omics_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
-                        drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-                        n_layer,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+# # set_seed(seed)
+# if model_name == "Omics_DrugESPF_Model":
+#     model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
+#                         drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
+#                         n_layer,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+# elif model_name == "Omics_DCSA_Model":
+#     model = Omics_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
+#                         drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
+#                         n_layer,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
 
-# model.to(device=device)
-num_param = sum([param.nelement() for param in model.parameters()])
-print("Number of parameter: %.2fK" % (num_param/1e3))
+# # model.to(device=device)
+# num_param = sum([param.nelement() for param in model.parameters()])
+# print("Number of parameter: %.2fK" % (num_param/1e3))
 
 
 # # Evaluation on the train set
