@@ -31,6 +31,9 @@ AUCtransform = None #"-log2"
 splitType= 'byCCL' # byCCL byDrug
 kfoldCV = 2
 include_omics = ['Exp']
+deconfound_EXPembedding = True # False True
+if deconfound_EXPembedding is True:
+    omics_files['Exp'] = "../data/DAPL/share/pretrain/VAE/ccle_latent_results.pkl" #
 max_drug_len=50 # 不夠補零補到50 / 超過取前50個subwords(index) !!!!須改方法!!!! 
 drug_embedding_feature_size = 128
 ESPF = True # False True
@@ -73,7 +76,7 @@ criterion = Custom_LossFunction(loss_type="BCE", loss_lambda=1.0, regular_type=N
 #criterion =  FocalLoss(loss_type="MSE", alpha=8.0, gamma=1.0, regular_type=None, regular_lambda=1e-05) # loss_type="MSE"/"MAE"
 # criterion = FocalHuberLoss(loss_type="FocalHuberLoss",delta=0.2, alpha=0.3, gamma=2.0, regular_type=None, regular_lambda=1e-05)
 if criterion.loss_type == "BCE":
-    metrics_type_set = ["Accuracy","AUROC", "AUPRC", "Precision", "Recall", "F1"] 
+    metrics_type_set = ["Accuracy","AUROC", "AUPRC", "Sensitivity","Specificity", "Precision", "F1"] 
 else:
     metrics_type_set = ["MSE", "R^2"] #"MSE","MAE"  None
 metrics_calculator = MetricsCalculator_nntorch(types = metrics_type_set)

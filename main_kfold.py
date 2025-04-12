@@ -1,5 +1,6 @@
 #main_kfold
 # pip install subword-nmt seaborn lifelines openpyxl matplotlib scikit-learn openTSNE
+# pip install torchmetrics==1.2.0 pandas==2.1.4 numpy==1.26.4
 import argparse
 # import shutil
 import pandas as pd
@@ -19,6 +20,7 @@ import random
 import gc
 import os
 import importlib.util
+import pickle
 
 from utils.ESPF_drug2emb import drug2emb_encoder
 from utils.Model import Omics_DrugESPF_Model, Omics_DCSA_Model
@@ -46,20 +48,36 @@ for key, value in vars(config).items():
 device = (torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'))
 print(f"Training on device {device}.")
 
+#load data
+# data_mut, gene_names_mut,ccl_names_mut  = load_ccl("/root/data/CCLE/CCLE_match_TCGAgene_PRISMandEXPsample_binary_mutation_476_6009.txt")
+drug_df= pd.read_csv(drug_df_path, sep=',', index_col=0)
+AUC_df = pd.read_csv(AUC_df_path, sep=',', index_col=0)
+# data_AUC_matrix, drug_names_AUC, ccl_names_AUC = load_AUC_matrix(splitType,"/root/Winnie/no_Imputation_PRISM_Repurposing_Secondary_Screen_data/Drug_sensitivity_AUC_(PRISM_Repurposing_Secondary_Screen)_subsetted.csv") # splitType = "byCCL" or "byDrug" 決定AUCmatrix要不要轉置
+
+# matched AUCfile and omics_data samples
+print(f"exp_df samples: {len(exp_df.index)} , AUC_df samples: {len(AUC_df.index)}")
+matched_samples = sorted(set(AUC_df.index) & set(exp_df.index))
+
+AUC_df= (AUC_df.T[matched_samples]).T
 
 #--------------------------------------------------------------------------------------------------------------------------
 set_seed(seed)
 for omic_type in include_omics:
-    # Read the file
-    omics_data_dict[omic_type] = pd.read_csv(omics_files[omic_type], sep='\t', index_col=0)
+    if deconfound_EXPembedding is True:
+        with open(omics_files['Exp'], 'rb') as f:
+            latent_dict = pickle.load(f)
+            omics_data_dict[omic_type] = pd.DataFrame(latent_dict).T
+    else:
+        # Read the file
+        omics_data_dict[omic_type] = pd.read_csv(omics_files[omic_type], sep='\t', index_col=0)
 
+        if omic_type == "Exp":# apply Column-wise z-score standardization 
+            scaler = StandardScaler() 
+            omics_data_dict[omic_type] = pd.DataFrame(scaler.fit_transform(omics_data_dict[omic_type]),index=omics_data_dict[omic_type].index,columns=omics_data_dict[omic_type].columns).loc[matched_samples]
     if test is True:
         # Specify the index as needed
         omics_data_dict[omic_type] = omics_data_dict[omic_type][:76]  # Adjust the row selection as needed  
-    if omic_type == "Exp":# apply Column-wise z-score standardization 
-        scaler = StandardScaler() 
-        omics_data_dict[omic_type] = pd.DataFrame(scaler.fit_transform(omics_data_dict[omic_type]),index=omics_data_dict[omic_type].index,columns=omics_data_dict[omic_type].columns)
-
+    
     omics_data_tensor_dict[omic_type]  = torch.tensor(omics_data_dict[omic_type].values, dtype=torch.float32).to(device)
     omics_numfeatures_dict[omic_type] = omics_data_tensor_dict[omic_type].shape[1]
  
@@ -67,15 +85,6 @@ for omic_type in include_omics:
     print(f"{omic_type} num_features",omics_numfeatures_dict[omic_type])
 
 #----------------------------------------------------------------------------------------------------------------------
-#load data
-# data_mut, gene_names_mut,ccl_names_mut  = load_ccl("/root/data/CCLE/CCLE_match_TCGAgene_PRISMandEXPsample_binary_mutation_476_6009.txt")
-drug_df= pd.read_csv("../data/no_Imputation_PRISM_Repurposing_Secondary_Screen_data/MACCS(Secondary_Screen_treatment_info)_union_NOrepeat.csv", sep=',', index_col=0)
-AUC_df = pd.read_csv("../data/no_Imputation_PRISM_Repurposing_Secondary_Screen_data/Drug_sensitivity_AUC_(PRISM_Repurposing_Secondary_Screen)_subsetted_NOrepeat.csv", sep=',', index_col=0)
-# data_AUC_matrix, drug_names_AUC, ccl_names_AUC = load_AUC_matrix(splitType,"/root/Winnie/no_Imputation_PRISM_Repurposing_Secondary_Screen_data/Drug_sensitivity_AUC_(PRISM_Repurposing_Secondary_Screen)_subsetted.csv") # splitType = "byCCL" or "byDrug" 決定AUCmatrix要不要轉置
-
-# matched AUCfile and omics_data samples
-matched_samples = sorted(set(AUC_df.T.columns) & set(list(omics_data_dict.values())[0].T.columns))
-AUC_df= (AUC_df.T[matched_samples]).T
 
 if AUCtransform == "-log2":
     AUC_df = -np.log2(AUC_df)
@@ -198,11 +207,11 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     if model_name == "Omics_DrugESPF_Model":
         model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-                            n_layer, TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+                            n_layer,deconfound_EXPembedding, TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
     elif model_name == "Omics_DCSA_Model":
         model = Omics_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-                            n_layer, TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+                            n_layer,deconfound_EXPembedding, TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
 
     model.to(device=device)
 
@@ -324,11 +333,11 @@ if criterion.regular_type is not None:
 # if model_name == "Omics_DrugESPF_Model":
 #     model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
 #                         drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-#                         n_layer,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+#                         n_layer,deconfound_EXPembedding,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
 # elif model_name == "Omics_DCSA_Model":
 #     model = Omics_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
 #                         drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-#                         n_layer,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+#                         n_layer,deconfound_EXPembedding,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
 
 # # model.to(device=device)
 # num_param = sum([param.nelement() for param in model.parameters()])

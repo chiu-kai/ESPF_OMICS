@@ -379,47 +379,54 @@ def create_mlpEncoder(dimList, activation_func):
         layers.append(nn.Linear(dimList[i], dimList[i + 1]))
         if i < len(dimList) - 2:  
             layers.append(activation_func)
-
     return nn.Sequential(*layers)
 
 
 # Models------------------------------------------------------------------------------------------------------------------------------------------------------
 class Omics_DrugESPF_Model(nn.Module):
     def __init__(self,omics_encode_dim_dict,drug_encode_dims, activation_func,activation_func_final,dense_layer_dim, device, ESPF, Drug_SelfAttention,
-                 pos_emb_type, hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,n_layer, TCGA_pretrain_weight_path_dict=None):
+                 pos_emb_type, hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,n_layer,deconfound_EXPembedding, TCGA_pretrain_weight_path_dict=None):
         super(Omics_DrugESPF_Model, self).__init__()
         self.n_layer = n_layer
-        def load_TCGA_pretrain_weight(model, pretrained_weights_path, device):
-            state_dict = torch.load(pretrained_weights_path, map_location=device)  # Load the state_dict
-            encoder_state_dict = {key[len("encoder."):]: value for key, value in state_dict.items() if key.startswith('encoder')}  # Extract encoder weights
-            model.load_state_dict(encoder_state_dict)  # Load only the encoder part
-            model_keys = set(model.state_dict().keys())  # Check if the keys match
-            loaded_keys = set(encoder_state_dict.keys())
-            if model_keys == loaded_keys:
-                print(f"State_dict for {model} loaded successfully.")
-            else:
-                print(f"State_dict does not match the model's architecture for {model}.")
-                print("Model keys: ", model_keys, " Loaded keys: ", loaded_keys)
 
-# Create subnetworks for each omic type dynamically
-        self.MLP4omics_dict = nn.ModuleDict()
-        # for omic_type in omics_numfeatures_dict.keys():
-        #     self.MLP4omics_dict[omic_type] = nn.Sequential(
-        #         nn.Linear(omics_numfeatures_dict[omic_type], omics_encode_dim_dict[omic_type][0]),
-        #         activation_func,
-        #         nn.Linear(omics_encode_dim_dict[omic_type][0], omics_encode_dim_dict[omic_type][1]),
-        #         activation_func,
-        #         nn.Linear(omics_encode_dim_dict[omic_type][1], omics_encode_dim_dict[omic_type][2]),
-        #         activation_func
-        #     )
-        for omic_type in omics_numfeatures_dict.keys():
-            self.MLP4omics_dict[omic_type] = create_mlpEncoder([omics_numfeatures_dict[omic_type]] + omics_encode_dim_dict[omic_type], activation_func
-            )
-            # Initialize with TCGA pretrain weight
-            if TCGA_pretrain_weight_path_dict is not None:
-                load_TCGA_pretrain_weight(self.MLP4omics_dict[omic_type], TCGA_pretrain_weight_path_dict[omic_type], device)
-            else: # Initialize weights with Kaiming uniform initialization, bias with aero
-                self._init_weights(self.MLP4omics_dict[omic_type])
+        if deconfound_EXPembedding is True:
+            self.MLP4omics_dict = nn.ModuleDict()
+            for omic_type in omics_numfeatures_dict.keys():
+                self.MLP4omics_dict[omic_type] = nn.Sequential(
+                    nn.Identity()  # just pass through the input, no linear combination no transformation
+                )
+        else:    
+            def load_TCGA_pretrain_weight(model, pretrained_weights_path, device):
+                state_dict = torch.load(pretrained_weights_path, map_location=device)  # Load the state_dict
+                encoder_state_dict = {key[len("encoder."):]: value for key, value in state_dict.items() if key.startswith('encoder')}  # Extract encoder weights
+                model.load_state_dict(encoder_state_dict)  # Load only the encoder part
+                model_keys = set(model.state_dict().keys())  # Check if the keys match
+                loaded_keys = set(encoder_state_dict.keys())
+                if model_keys == loaded_keys:
+                    print(f"State_dict for {model} loaded successfully.")
+                else:
+                    print(f"State_dict does not match the model's architecture for {model}.")
+                    print("Model keys: ", model_keys, " Loaded keys: ", loaded_keys)
+
+    # Create subnetworks for each omic type dynamically
+            self.MLP4omics_dict = nn.ModuleDict()
+            # for omic_type in omics_numfeatures_dict.keys():
+            #     self.MLP4omics_dict[omic_type] = nn.Sequential(
+            #         nn.Linear(omics_numfeatures_dict[omic_type], omics_encode_dim_dict[omic_type][0]),
+            #         activation_func,
+            #         nn.Linear(omics_encode_dim_dict[omic_type][0], omics_encode_dim_dict[omic_type][1]),
+            #         activation_func,
+            #         nn.Linear(omics_encode_dim_dict[omic_type][1], omics_encode_dim_dict[omic_type][2]),
+            #         activation_func
+            #     )
+            for omic_type in omics_numfeatures_dict.keys():
+                self.MLP4omics_dict[omic_type] = create_mlpEncoder([omics_numfeatures_dict[omic_type]] + omics_encode_dim_dict[omic_type], activation_func
+                )
+                # Initialize with TCGA pretrain weight
+                if TCGA_pretrain_weight_path_dict is not None:
+                    load_TCGA_pretrain_weight(self.MLP4omics_dict[omic_type], TCGA_pretrain_weight_path_dict[omic_type], device)
+                else: # Initialize weights with Kaiming uniform initialization, bias with aero
+                    self._init_weights(self.MLP4omics_dict[omic_type])
 
 # Define subnetwork for drug ESPF features
         if ESPF is True:
@@ -558,44 +565,55 @@ class Omics_DrugESPF_Model(nn.Module):
 # Omics_DCSA_Model
 class Omics_DCSA_Model(nn.Module):
     def __init__(self,omics_encode_dim_dict,drug_encode_dims, activation_func,activation_func_final,dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
-                 hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,n_layer, TCGA_pretrain_weight_path_dict=None):
+                 hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,n_layer,deconfound_EXPembedding, TCGA_pretrain_weight_path_dict=None):
         super(Omics_DCSA_Model, self).__init__()
         self.num_attention_heads = num_attention_heads
         self.n_layer = n_layer
-        def load_TCGA_pretrain_weight(model, pretrained_weights_path, device):
-            state_dict = torch.load(pretrained_weights_path, map_location=device)  # Load the state_dict
-            encoder_state_dict = {key[len("encoder."):]: value for key, value in state_dict.items() if key.startswith('encoder')}  # Extract encoder weights
-            model.load_state_dict(encoder_state_dict)  # Load only the encoder part
-            model_keys = set(model.state_dict().keys())  # Check if the keys match
-            loaded_keys = set(encoder_state_dict.keys())
-            if model_keys == loaded_keys:
-                print(f"State_dict for {model} loaded successfully.")
-            else:
-                print(f"State_dict does not match the model's architecture for {model}.")
-                print("Model keys: ", model_keys, " Loaded keys: ", loaded_keys)
         
-        self.MLP4omics_dict = nn.ModuleDict()
-        # for omic_type in omics_numfeatures_dict.keys():
-        #     self.MLP4omics_dict[omic_type] = nn.Sequential(
-        #         nn.Linear(omics_numfeatures_dict[omic_type], omics_encode_dim_dict[omic_type][0]),
-        #         activation_func,
-        #         nn.Linear(omics_encode_dim_dict[omic_type][0], omics_encode_dim_dict[omic_type][1]),
-        #         activation_func,
-        #         nn.Linear(omics_encode_dim_dict[omic_type][1], omics_encode_dim_dict[omic_type][2]),
-        #         activation_func
-        #     )
-        for omic_type in omics_numfeatures_dict.keys():
-            self.MLP4omics_dict[omic_type] = create_mlpEncoder([omics_numfeatures_dict[omic_type]] + omics_encode_dim_dict[omic_type], activation_func
-            )
-            # Initialize with TCGA pretrain weight
-            if TCGA_pretrain_weight_path_dict is not None:
-                load_TCGA_pretrain_weight(self.MLP4omics_dict[omic_type], TCGA_pretrain_weight_path_dict[omic_type], device)
-            else: # Initialize weights with Kaiming uniform initialization, bias with aero
-                self._init_weights(self.MLP4omics_dict[omic_type])
+        if deconfound_EXPembedding is True:
+            self.MLP4omics_dict = nn.ModuleDict()
+            for omic_type in omics_numfeatures_dict.keys():
+                self.MLP4omics_dict[omic_type] = nn.Sequential(
+                    nn.Identity()  # just pass through the input, no linear combination no transformation
+                )
+                #apply a linear tranformation to omics embedding to match the hidden size of the drug
+                self.match_drug_dim = nn.Linear(omics_encode_dim_dict[omic_type][-1], hidden_size)
+                self._init_weights(self.match_drug_dim)
+        else:
+            def load_TCGA_pretrain_weight(model, pretrained_weights_path, device):
+                state_dict = torch.load(pretrained_weights_path, map_location=device)  # Load the state_dict
+                encoder_state_dict = {key[len("encoder."):]: value for key, value in state_dict.items() if key.startswith('encoder')}  # Extract encoder weights
+                model.load_state_dict(encoder_state_dict)  # Load only the encoder part
+                model_keys = set(model.state_dict().keys())  # Check if the keys match
+                loaded_keys = set(encoder_state_dict.keys())
+                if model_keys == loaded_keys:
+                    print(f"State_dict for {model} loaded successfully.")
+                else:
+                    print(f"State_dict does not match the model's architecture for {model}.")
+                    print("Model keys: ", model_keys, " Loaded keys: ", loaded_keys)
+            
+            self.MLP4omics_dict = nn.ModuleDict()
+            # for omic_type in omics_numfeatures_dict.keys():
+            #     self.MLP4omics_dict[omic_type] = nn.Sequential(
+            #         nn.Linear(omics_numfeatures_dict[omic_type], omics_encode_dim_dict[omic_type][0]),
+            #         activation_func,
+            #         nn.Linear(omics_encode_dim_dict[omic_type][0], omics_encode_dim_dict[omic_type][1]),
+            #         activation_func,
+            #         nn.Linear(omics_encode_dim_dict[omic_type][1], omics_encode_dim_dict[omic_type][2]),
+            #         activation_func
+            #     )
+            for omic_type in omics_numfeatures_dict.keys():
+                self.MLP4omics_dict[omic_type] = create_mlpEncoder([omics_numfeatures_dict[omic_type]] + omics_encode_dim_dict[omic_type], activation_func
+                )
+                # Initialize with TCGA pretrain weight
+                if TCGA_pretrain_weight_path_dict is not None:
+                    load_TCGA_pretrain_weight(self.MLP4omics_dict[omic_type], TCGA_pretrain_weight_path_dict[omic_type], device)
+                else: # Initialize weights with Kaiming uniform initialization, bias with aero
+                    self._init_weights(self.MLP4omics_dict[omic_type])
 
-            #apply a linear tranformation to omics embedding to match the hidden size of the drug
-            self.match_drug_dim = nn.Linear(omics_encode_dim_dict[omic_type][-1], hidden_size)
-            self._init_weights(self.match_drug_dim)
+                #apply a linear tranformation to omics embedding to match the hidden size of the drug
+                self.match_drug_dim = nn.Linear(omics_encode_dim_dict[omic_type][-1], hidden_size)
+                self._init_weights(self.match_drug_dim)
         
 #ESPF            
         self.emb_f = Embeddings(hidden_size,max_drug_len,hidden_dropout_prob, pos_emb_type,substructure_size = 2586)#(128,50,0.1,2586)

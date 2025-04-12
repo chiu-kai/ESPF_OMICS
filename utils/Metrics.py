@@ -33,13 +33,15 @@ class MetricsCalculator_nntorch(nn.Module):
             auroc = torchmetrics.classification.AUROC(task="binary").to(device)(y_pred, GT)  # Use raw scores
             auprc = torchmetrics.classification.AveragePrecision(task="binary").to(device)(y_pred, GT) # Use raw scores
             f1 = torchmetrics.classification.F1Score(task="binary").to(device)(pred_bi, GT)
-            recall = torchmetrics.classification.Recall(task="binary").to(device)(pred_bi, GT)
+            sensitivity = torchmetrics.classification.Recall(task="binary").to(device)(pred_bi, GT)
+            specificity = torchmetrics.classification.Specificity(task="binary").to(device)(pred_bi, GT)
             precision = torchmetrics.classification.Precision(task="binary").to(device)(pred_bi, GT)
             self.results = {"Accuracy": accuracy,
                             "AUROC": auroc,
                             "AUPRC": auprc,
+                            "Sensitivity": sensitivity,
+                            "Specificity": specificity,
                             "Precision": precision,
-                            "Recall": recall,
                             "F1": f1}
         return self.results
     def confusion_matrix(self, y_true, y_pred,median_value):  

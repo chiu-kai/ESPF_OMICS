@@ -1,5 +1,6 @@
 #main_kfold_GDSC
 # pip install subword-nmt seaborn lifelines openpyxl matplotlib scikit-learn openTSNE
+# pip install torchmetrics==1.2.0 pandas==2.1.4 numpy==1.26.4
 import argparse
 import pandas as pd
 import numpy as np
@@ -18,6 +19,7 @@ import random
 import gc
 import os
 import importlib.util
+import pickle
 
 from utils.ESPF_drug2emb import drug2emb_encoder
 from utils.Model import Omics_DrugESPF_Model, Omics_DCSA_Model
@@ -46,27 +48,34 @@ device = (torch.device('cuda') if torch.cuda.is_available() else torch.device('c
 print(f"Training on device {device}.")
 
 # 檢查exp和AUC的samples是否一致
-exp_df = pd.read_csv(omics_files["Exp"], sep=',', index_col=0)
+if deconfound_EXPembedding is True:
+    with open(omics_files['Exp'], 'rb') as f:
+        latent_dict = pickle.load(f)
+        exp_df = pd.DataFrame(latent_dict).T
+else:
+    exp_df = pd.read_csv(omics_files["Exp"], sep=',', index_col=0)
 AUC_df_numerical = pd.read_csv(AUC_df_path_numerical, sep=',', index_col=0)
-print(f"exp_df samples: {len(exp_df.index)}")
-print(f"AUC_df_numerical samples: {len(AUC_df_numerical.index)}")
+print(f"exp_df samples: {len(exp_df.index)} , AUC_df_numerical samples: {len(AUC_df_numerical.index)}")
 matched_samples = sorted(set(AUC_df_numerical.index) & set(exp_df.index))
 
 # 讀取omics資料
 set_seed(seed)
 for omic_type in include_omics:
-    omics_data_dict[omic_type] = pd.read_csv(omics_files[omic_type], sep=',', index_col=0)
-     
-    if omic_type == "Exp":# apply Column-wise Standardization 
-        scaler = StandardScaler() 
-        omics_data_dict[omic_type] = pd.DataFrame(scaler.fit_transform(omics_data_dict[omic_type]),index=omics_data_dict[omic_type].index,columns=omics_data_dict[omic_type].columns).loc[matched_samples]
+    if deconfound_EXPembedding is True:
+        omics_data_dict[omic_type] = exp_df
+    else:
+        omics_data_dict[omic_type] = pd.read_csv(omics_files[omic_type], sep=',', index_col=0)
+        
+        if omic_type == "Exp":# apply Column-wise Standardization 
+            scaler = StandardScaler() 
+            omics_data_dict[omic_type] = pd.DataFrame(scaler.fit_transform(omics_data_dict[omic_type]),index=omics_data_dict[omic_type].index,columns=omics_data_dict[omic_type].columns).loc[matched_samples]
     if test is True:
         # Specify the index as needed
         omics_data_dict[omic_type] = omics_data_dict[omic_type][:76]  # Adjust the row selection as needed
-         
+        
     omics_data_tensor_dict[omic_type]  = torch.tensor(omics_data_dict[omic_type].values, dtype=torch.float32).to(device)
     omics_numfeatures_dict[omic_type] = omics_data_tensor_dict[omic_type].shape[1]
- 
+
     print(f"{omic_type} tensor shape:", omics_data_tensor_dict[omic_type].shape)
     print(f"{omic_type} num_features",omics_numfeatures_dict[omic_type])
 
@@ -101,7 +110,6 @@ if test is True:
     print("AUC_df",AUC_df.shape)
     kfoldCV = 2
     print("kfoldCV",kfoldCV)
-
 
 if 'weighted' in criterion.loss_type :    
     # Set threshold based on the 90th percentile # 將高於threshold的AUC權重增加
@@ -201,11 +209,11 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     if model_name == "Omics_DrugESPF_Model":
         model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-                            n_layer,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+                            n_layer,deconfound_EXPembedding,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
     elif model_name == "Omics_DCSA_Model":
         model = Omics_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-                            n_layer,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+                            n_layer,deconfound_EXPembedding,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
 
     model.to(device=device)
 
@@ -318,19 +326,12 @@ if criterion.loss_type != "BCE":
                         train_spearman,val_spearman,test_spearman, 
                         hyperparameter_folder_path)
 
-# get range of GroundTruth AUC and predicted AUC distribution
-predicted_AUC = torch.cat( BF_train_outputs + BF_val_outputs + BF_test_outputs)
-# print(predicted_AUC[:10])
-print("predicted_AUC",predicted_AUC.shape)
-GroundTruth_AUC =  torch.cat( BF_train_targets + BF_val_targets + BF_test_targets)
-print("GroundTruth_AUC",GroundTruth_AUC.shape)
-# print(GroundTruth_AUC[:10])
 #--------------------------------------------------------------------------------------------------------------------------
-datas = [(BF_train_targets, BF_train_outputs, 'Train', 'red'),
-         (BF_val_targets, BF_val_outputs, 'Validation', 'green'),
-         (BF_test_targets, BF_test_outputs, 'Test', 'purple')]
-# plot Density_Plot_of_AUC_Values of train val test datasets
-Density_Plot_of_AUC_Values(datas,hyperparameter_folder_path)
+    datas = [(BF_train_targets, BF_train_outputs, 'Train', 'red'),
+             (BF_val_targets, BF_val_outputs, 'Validation', 'green'),
+             (BF_test_targets, BF_test_outputs, 'Test', 'purple')]
+    # plot Density_Plot_of_AUC_Values of train val test datasets
+    Density_Plot_of_AUC_Values(datas,hyperparameter_folder_path)
 
 #----------------------------------------------------------------------------------
 
@@ -352,9 +353,6 @@ if criterion.loss_type == "BCE":
 
 output_file = f"{hyperparameter_folder_path}/BF{BF}_result_performance.txt"
 with open(output_file, "w") as file:
-    # data range
-    get_data_value_range(GroundTruth_AUC.tolist(),"GroundTruth_AUC", file=file)
-    get_data_value_range(predicted_AUC.tolist(),"predicted_AUC", file=file)
 
     file.write(f'\nhyperparameter_print\n{hyperparameter_print}')
     
@@ -393,8 +391,7 @@ with open(output_file, "w") as file:
                    f"Best Fold {BF} Val GT_count_0_1: {val_GT_0_count}_{val_GT_1_count}\n"
                    f"Best Fold {BF} Val pred_binary_count_0_1: {val_pred_binary_0_count}_{val_pred_binary_1_count}\n"
                    f"Best Fold {BF} Test GT_count_0_1: {test_GT_0_count}_{test_GT_1_count}\n"
-                   f"Best Fold {BF} Test pred_binary_count_0_1: {test_pred_binary_0_count}_{test_pred_binary_1_count}\n")
-                    
+                   f"Best Fold {BF} Test pred_binary_count_0_1: {test_pred_binary_0_count}_{test_pred_binary_1_count}\n")       
     else:
     # Pearson and Spearman statistics
         # <=0的都=0

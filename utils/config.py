@@ -6,7 +6,8 @@ from utils.Custom_Activation_Function import ScaledSigmoid, ReLU_clamp
 from utils.Metrics import MetricsCalculator_nntorch
 
 test = True #False, True: batch_size = 3, num_epoch = 2, full dataset
-
+drug_df_path= "../data/no_Imputation_PRISM_Repurposing_Secondary_Screen_data/MACCS(Secondary_Screen_treatment_info)_union_NOrepeat.csv"
+AUC_df_path = "../data/no_Imputation_PRISM_Repurposing_Secondary_Screen_data/Drug_sensitivity_AUC_(PRISM_Repurposing_Secondary_Screen)_subsetted_NOrepeat.csv"
 omics_files = {
     'Mut': "../data/CCLE/CCLE_match_TCGAgene_PRISMandEXPsample_binary_mutation_476_6009.txt",
     'Exp': "../data/CCLE/CCLE_exp_476samples_4692genes.txt",
@@ -30,6 +31,9 @@ AUCtransform = None #"-log2"
 splitType= 'byCCL' # byCCL byDrug
 kfoldCV = 2
 include_omics = ['Exp']
+deconfound_EXPembedding = True # False True
+if deconfound_EXPembedding is True:
+    omics_files['Exp'] = "../data/DAPL/share/pretrain/VAE/ccle_latent_results.pkl" #
 max_drug_len=50 # 不夠補零補到50 / 超過取前50個subwords(index) !!!!須改方法!!!! 
 drug_embedding_feature_size = 128
 ESPF = True # False True
