@@ -26,7 +26,7 @@ class MetricsCalculator_nntorch(nn.Module):
             device=y_true.device
             median_tensor = torch.tensor(median_value, dtype=torch.float32, device=device)
             # Binarize labels and predictions based on median threshold
-            GT = (y_true > median_tensor).int()
+            GT = (y_true > median_tensor).int() # match the type of y_pred
             pred_bi = (y_pred > median_tensor).int()
             # Compute metrics using torchmetrics
             accuracy = torchmetrics.classification.Accuracy(task="binary").to(device)(pred_bi, GT)

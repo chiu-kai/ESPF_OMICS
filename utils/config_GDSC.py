@@ -4,6 +4,7 @@ from utils.Loss import Custom_LossFunction,Custom_Weighted_LossFunction,FocalLos
 from utils.Custom_Activation_Function import ScaledSigmoid, ReLU_clamp
 from utils.Metrics import MetricsCalculator_nntorch
 
+model_inference = True # False
 test = True #False, True: batch_size = 3, num_epoch = 2, full dataset
 drug_df_path= "../data/DAPL/share/GDSC_drug_merge_pubchem_dropNA_MACCS.csv"
 AUC_df_path_numerical = "../data/DAPL/share/gdsc1+2_ccle_AUC_sorted.csv" # gdsc1+2_ccle_z-score　gdsc1+2_ccle_AUC
@@ -25,6 +26,7 @@ TCGA_pretrain_weight_path_dict = {'Mut': "",
                                   # Add more omics types and paths as needed
                                 }
 seed = 42
+
 #hyperparameter
 model_name = "Omics_DCSA_Model" # Omics_DrugESPF_Model  Omics_DCSA_Model
 AUCtransform = None #"-log2"
@@ -33,7 +35,8 @@ kfoldCV = 2
 include_omics = ['Exp']
 deconfound_EXPembedding = True # False True
 if deconfound_EXPembedding is True:
-    omics_files['Exp'] = "../data/DAPL/share/pretrain/VAE/ccle_latent_results.pkl" #
+    DA_Folder = "VAE"
+    omics_files['Exp'] = f"../data/DAPL/share/pretrain/{DA_Folder}/ccle_latent_results.pkl" #
 max_drug_len=50 # 不夠補零補到50 / 超過取前50個subwords(index) !!!!須改方法!!!! 
 drug_embedding_feature_size = 128
 ESPF = True # False True
@@ -88,7 +91,7 @@ metrics_calculator = MetricsCalculator_nntorch(types = metrics_type_set)
         regular_lambda (float): The lambda weight for regularization. Default is 1e-05.
 
         # Binary Cross Entropy Loss # already done sigmoid"""
-hyperparameter_print = f' omics_dict ={omics_dict}\n omics_files ={omics_files}\n TCGA_pretrain_weight_path_dict ={TCGA_pretrain_weight_path_dict}\n seed ={seed}\n  model_name ={model_name}\n AUCtransform ={AUCtransform}\n splitType ={splitType}\n kfoldCV ={kfoldCV}\n omics_encode_dim ={[(omic_type,omics_encode_dim_dict[omic_type]) for omic_type in include_omics]}\n max_drug_len ={max_drug_len}\n drug_embedding_feature_size ={drug_embedding_feature_size}\n ESPF ={ESPF}\n Drug_SelfAttention ={Drug_SelfAttention}\n n_layer ={n_layer}\n pos_emb_type ={pos_emb_type}\n intermediate_size ={intermediate_size}\n num_attention_heads ={num_attention_heads}\n attention_probs_dropout_prob ={attention_probs_dropout_prob}\n hidden_dropout_prob ={hidden_dropout_prob}\n drug_encode_dims ={drug_encode_dims}\n dense_layer_dim = {dense_layer_dim}\n activation_func = {activation_func}\n activation_func_final = {activation_func_final}\n batch_size = {batch_size}\n num_epoch = {num_epoch}\n patience = {patience}\n warmup_iters = {warmup_iters}\n Decrease_percent = {Decrease_percent}\n continuous ={continuous}\n learning_rate = {learning_rate}\n criterion ={criterion}\n'
+hyperparameter_print = f' omics_dict ={omics_dict}\n omics_files ={omics_files}\n TCGA_pretrain_weight_path_dict ={TCGA_pretrain_weight_path_dict}\n seed ={seed}\n  model_name ={model_name}\n AUCtransform ={AUCtransform}\n splitType ={splitType}\n kfoldCV ={kfoldCV}\n omics_encode_dim ={[(omic_type,omics_encode_dim_dict[omic_type]) for omic_type in include_omics]}\n deconfound_EXPembedding ={deconfound_EXPembedding}\n DA_Folder ={DA_Folder}\n max_drug_len ={max_drug_len}\n drug_embedding_feature_size ={drug_embedding_feature_size}\n ESPF ={ESPF}\n Drug_SelfAttention ={Drug_SelfAttention}\n n_layer ={n_layer}\n pos_emb_type ={pos_emb_type}\n intermediate_size ={intermediate_size}\n num_attention_heads ={num_attention_heads}\n attention_probs_dropout_prob ={attention_probs_dropout_prob}\n hidden_dropout_prob ={hidden_dropout_prob}\n drug_encode_dims ={drug_encode_dims}\n dense_layer_dim = {dense_layer_dim}\n activation_func = {activation_func}\n activation_func_final = {activation_func_final}\n batch_size = {batch_size}\n num_epoch = {num_epoch}\n patience = {patience}\n warmup_iters = {warmup_iters}\n Decrease_percent = {Decrease_percent}\n continuous ={continuous}\n learning_rate = {learning_rate}\n criterion ={criterion}\n'
 
 __translation_table__ = str.maketrans({
     "*": "",    "/": "",    ":": "-",    "%": "",

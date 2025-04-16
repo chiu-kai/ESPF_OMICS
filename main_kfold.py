@@ -69,11 +69,11 @@ for omic_type in include_omics:
             omics_data_dict[omic_type] = pd.DataFrame(latent_dict).T
     else:
         # Read the file
-        omics_data_dict[omic_type] = pd.read_csv(omics_files[omic_type], sep='\t', index_col=0)
+        omics_data_dict[omic_type] = pd.read_csv(omics_files[omic_type], sep='\t', index_col=0).loc[matched_samples]
 
         if omic_type == "Exp":# apply Column-wise z-score standardization 
             scaler = StandardScaler() 
-            omics_data_dict[omic_type] = pd.DataFrame(scaler.fit_transform(omics_data_dict[omic_type]),index=omics_data_dict[omic_type].index,columns=omics_data_dict[omic_type].columns).loc[matched_samples]
+            omics_data_dict[omic_type] = pd.DataFrame(scaler.fit_transform(omics_data_dict[omic_type]),index=omics_data_dict[omic_type].index,columns=omics_data_dict[omic_type].columns)
     if test is True:
         # Specify the index as needed
         omics_data_dict[omic_type] = omics_data_dict[omic_type][:76]  # Adjust the row selection as needed  
@@ -283,7 +283,7 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     # Empty PyTorch cache
     torch.cuda.empty_cache() # model 會從GPU消失，所以要evaluation時要重新load model
 # Saving the model weughts
-hyperparameter_folder_path = f'./results/BF{BF}_test_loss{BF_test_loss:.7f}_BestValEpo{BF_best_epoch}_{hyperparameter_folder_part}' # /root/Winnie/PDAC
+hyperparameter_folder_path = f'./results/BF{BF}_test_loss{BF_test_loss:.7f}_BestValEpo{BF_best_epoch}_{hyperparameter_folder_part}_nlayer{n_layer}' # /root/Winnie/PDAC
 os.makedirs(hyperparameter_folder_path, exist_ok=True)
 save_path = os.path.join(hyperparameter_folder_path, f'BestValWeight.pt')
 torch.save(BF_best_weight, save_path)
@@ -400,13 +400,7 @@ correlation_density(model_name,train_pearson,val_pearson,test_pearson,
                     train_spearman,val_spearman,test_spearman, 
                     hyperparameter_folder_path)
 
-# get range of GroundTruth AUC and predicted AUC distribution
-predicted_AUC = torch.cat( BF_train_outputs + BF_val_outputs + BF_test_outputs)
-# print(predicted_AUC[:10])
-print("predicted_AUC",predicted_AUC.shape)
-GroundTruth_AUC =  torch.cat( BF_train_targets + BF_val_targets + BF_test_targets)
-print("GroundTruth_AUC",GroundTruth_AUC.shape)
-# print(GroundTruth_AUC[:10])
+
 #--------------------------------------------------------------------------------------------------------------------------
 datas = [(BF_train_targets, BF_train_outputs, 'Train', 'red'),
          (BF_val_targets, BF_val_outputs, 'Validation', 'green'),
@@ -414,14 +408,12 @@ datas = [(BF_train_targets, BF_train_outputs, 'Train', 'red'),
 # plot Density_Plot_of_AUC_Values of train val test datasets
 Density_Plot_of_AUC_Values(datas,hyperparameter_folder_path)
 
-#----------------------------------------------------------------------------------
-
 #--------------------------------------------------------------------------------------------------------------------------
 output_file = f"{hyperparameter_folder_path}/BF{BF}_result_performance.txt"
 with open(output_file, "w") as file:
     # data range
-    get_data_value_range(GroundTruth_AUC.tolist(),"GroundTruth_AUC", file=file)
-    get_data_value_range(predicted_AUC.tolist(),"predicted_AUC", file=file)
+    get_data_value_range(torch.cat(BF_train_targets + BF_val_targets + BF_test_targets).tolist(),"GroundTruth_AUC", file=file)
+    get_data_value_range(torch.cat(BF_train_outputs + BF_val_outputs + BF_test_outputs).tolist(),"predicted_AUC", file=file)
 
     file.write(f'\nhyperparameter_print\n{hyperparameter_print}')
     #----------------After Training-------------- #驗證與Evaluation是否一致

@@ -377,8 +377,8 @@ def create_mlpEncoder(dimList, activation_func):
     layers = []
     for i in range(len(dimList) - 1):  
         layers.append(nn.Linear(dimList[i], dimList[i + 1]))
-        if i < len(dimList) - 2:  
-            layers.append(activation_func)
+        # if i < len(dimList) - 2:  
+        layers.append(activation_func)
     return nn.Sequential(*layers)
 
 

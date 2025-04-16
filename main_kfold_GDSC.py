@@ -20,6 +20,8 @@ import gc
 import os
 import importlib.util
 import pickle
+import torchmetrics
+from scipy.stats import ttest_ind
 
 from utils.ESPF_drug2emb import drug2emb_encoder
 from utils.Model import Omics_DrugESPF_Model, Omics_DCSA_Model
@@ -62,13 +64,12 @@ matched_samples = sorted(set(AUC_df_numerical.index) & set(exp_df.index))
 set_seed(seed)
 for omic_type in include_omics:
     if deconfound_EXPembedding is True:
-        omics_data_dict[omic_type] = exp_df
+        omics_data_dict[omic_type] = exp_df.loc[matched_samples]
     else:
-        omics_data_dict[omic_type] = pd.read_csv(omics_files[omic_type], sep=',', index_col=0)
-        
+        omics_data_dict[omic_type] = pd.read_csv(omics_files[omic_type], sep=',', index_col=0).loc[matched_samples]
         if omic_type == "Exp":# apply Column-wise Standardization 
             scaler = StandardScaler() 
-            omics_data_dict[omic_type] = pd.DataFrame(scaler.fit_transform(omics_data_dict[omic_type]),index=omics_data_dict[omic_type].index,columns=omics_data_dict[omic_type].columns).loc[matched_samples]
+            omics_data_dict[omic_type] = pd.DataFrame(scaler.fit_transform(omics_data_dict[omic_type]),index=omics_data_dict[omic_type].index,columns=omics_data_dict[omic_type].columns)
     if test is True:
         # Specify the index as needed
         omics_data_dict[omic_type] = omics_data_dict[omic_type][:76]  # Adjust the row selection as needed
@@ -285,7 +286,7 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     # Empty PyTorch cache
     torch.cuda.empty_cache() # model 會從GPU消失，所以要evaluation時要重新load model
 # Saving the model weughts
-hyperparameter_folder_path = f'./results_GDSC/BF{BF}_{criterion.loss_type}_test_loss{BF_test_loss:.7f}_BestValEpo{BF_best_epoch}_{hyperparameter_folder_part}' # /root/Winnie/PDAC
+hyperparameter_folder_path = f'./results_GDSC/BF{BF}_{criterion.loss_type}_test_loss{BF_test_loss:.7f}_BestValEpo{BF_best_epoch}_{hyperparameter_folder_part}_nlayer{n_layer}_DA{deconfound_EXPembedding}' # /root/Winnie/PDAC
 os.makedirs(hyperparameter_folder_path, exist_ok=True)
 save_path = os.path.join(hyperparameter_folder_path, f'BestValWeight.pt')
 torch.save(BF_best_weight, save_path)
@@ -335,8 +336,6 @@ if criterion.loss_type != "BCE":
 
 #----------------------------------------------------------------------------------
 
-#--------------------------------------------------------------------------------------------------------------------------
-
 
 if criterion.loss_type == "BCE":
     (train_cm , train_GT_0_count, train_GT_1_count, 
@@ -353,6 +352,10 @@ if criterion.loss_type == "BCE":
 
 output_file = f"{hyperparameter_folder_path}/BF{BF}_result_performance.txt"
 with open(output_file, "w") as file:
+    if criterion.loss_type != "BCE":
+        # data range
+        get_data_value_range(torch.cat(BF_train_targets + BF_val_targets + BF_test_targets).tolist(),"GroundTruth_AUC", file=file)
+        get_data_value_range(torch.cat(BF_train_outputs + BF_val_outputs + BF_test_outputs).tolist(),"predicted_AUC", file=file)
 
     file.write(f'\nhyperparameter_print\n{hyperparameter_print}')
     
@@ -434,3 +437,180 @@ with open(output_file, "w") as file:
     file.write(f"BF_test_outputs_before_final_activation_list\n{BF_test_outputs_before_final_activation_list[0][:10]}\n")
     file.write(f"BF_test_outputs\n{BF_test_outputs[0][:10]}\n")
     print("Output saved to:", output_file)
+
+
+if model_inference is True:
+    set_seed(seed)
+    if model_name == "Omics_DrugESPF_Model":
+        model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
+                            drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
+                            n_layer, deconfound_EXPembedding, TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+    elif model_name == "Omics_DCSA_Model":
+        model = Omics_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
+                            drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
+                            n_layer, deconfound_EXPembedding, TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+    model.to(device=device)
+    model.load_state_dict(BF_best_weight) 
+
+    drug_list=["cisplatin", "5-fluorouracil", "gemcitabine", "sorafenib", "temozolomide"]
+    drugs_metrics={}
+    for drug_name in drug_list:
+        if deconfound_EXPembedding is True:
+            with open(f"../data/DAPL/share/pretrain/{DA_Folder}/TCGA/{drug_name}_latent_results.pkl", 'rb') as f:
+                latent_dict = pickle.load(f)
+                TCGAexp_df = pd.DataFrame(latent_dict).T # 32
+        else:
+            # TCGAexp_df = pd.read_csv(f"../data/DAPL/share/PDTC_indiv_fromDAPL/{drug_name}/pdtcdata.csv", sep=',', index_col=0)
+            TCGAexp_df = pd.read_csv(f"../data/DAPL/share/TCGA_fromDAPL/{drug_name}/tcgadata.csv", sep=',', index_col=0) #1426
+        # label_df = pd.read_csv(f"../data/DAPL/share/PDTC_indiv_fromDAPL/{drug_name}/pdtclabel.csv", sep=',', index_col=0)
+        label_df = pd.read_csv(f"../data/DAPL/share/TCGA_fromDAPL/{drug_name}/tcgalabel.csv", sep=',', index_col=0)
+        label_df = 1 - label_df # make label 0 to 1, 1 to 0 to match predicted output. after that 0: sensitive, 1: resistant
+        print(f"TCGAexp {drug_name}data",TCGAexp_df.shape)
+        print(f"label_df {drug_name}data",label_df.shape)
+        for omic_type in include_omics:
+            if deconfound_EXPembedding is True:
+                omics_data_dict["Exp"] = TCGAexp_df
+            else:
+                if omic_type == "Exp":
+                    scaler = StandardScaler() 
+                    omics_data_dict[omic_type] = pd.DataFrame(scaler.fit_transform(TCGAexp_df),index=TCGAexp_df.index,columns=TCGAexp_df.columns)
+            omics_data_tensor_dict[omic_type]  = torch.tensor(omics_data_dict[omic_type].values, dtype=torch.float32).to(device)
+            omics_numfeatures_dict[omic_type] = omics_data_tensor_dict[omic_type].shape[1]
+
+            print(f"{omic_type} tensor shape:", omics_data_tensor_dict[omic_type].shape)
+            print(f"{omic_type} num_features",omics_numfeatures_dict[omic_type])
+
+        drug_df_path= "../data/DAPL/share/GDSC_drug_merge_pubchem_dropNA.csv"
+        drug_df = pd.read_csv( drug_df_path, sep=',', index_col=0)
+        # get specific drug and ccl
+        drug_df= drug_df[drug_df['name'] == drug_name]
+        print(drug_df)
+        if ESPF is True:
+            drug_smiles =drug_df["SMILES"] # 
+            print("drug_smiles",drug_smiles)
+            drug_names =drug_df.index
+            # 挑出重複的SMILES
+            duplicate =  drug_smiles[drug_smiles.duplicated(keep=False)]
+            #ESPF
+            vocab_path = "./ESPF/drug_codes_chembl_freq_1500.txt" # token
+            sub_csv = pd.read_csv("./ESPF/subword_units_map_chembl_freq_1500.csv")# token with frequency
+            # 將drug_smiles 使用_drug2emb_encoder function編碼成subword vector
+            drug_encode = pd.Series(drug_smiles).apply(drug2emb_encoder, args=(vocab_path, sub_csv, max_drug_len))
+            drug_features_tensor = torch.tensor(np.array([i[:2] for i in drug_encode.values]), dtype=torch.long).to(device)
+        else:
+            drug_encode = drug_df["MACCS166bits"]
+            drug_encode_list = [list(map(int, item.split(','))) for item in drug_encode.values]
+            print("MACCS166bits_drug_encode_list type: ",type(drug_encode_list))
+            # Convert your data to tensors if they're in numpy
+            drug_features_tensor = torch.tensor(np.array(drug_encode_list), dtype=torch.long).to(device)
+        #--------------------------------------------------------------------------------------------------------------------------
+        num_ccl = list(omics_data_tensor_dict.values())[0].shape[0]
+        num_drug = drug_encode.shape[0]
+        print("num_ccl,num_drug: ",num_ccl,num_drug)
+
+        response_matrix_tensor = torch.tensor(label_df.values, dtype=torch.float32).to(device).unsqueeze(1)
+        # print(omics_data_tensor_dict)
+        print(drug_features_tensor.shape)# Fc1c[nH]c(=O)[nH]c1=O 
+        print(response_matrix_tensor.shape)
+        # print(drug_encode.values)
+
+        if 'weighted' in criterion.loss_type :    
+            # Set threshold based on the 90th percentile # 將高於threshold的AUC權重增加
+            weighted_threshold = np.nanpercentile(AUC_df.values, 90)    
+            total_samples = (~np.isnan(AUC_df.values)).sum().item()
+            fewWt_samples = (AUC_df.values > weighted_threshold).sum().item()
+            moreWt_samples = total_samples - fewWt_samples
+            few_weight = total_samples / (2 * fewWt_samples)  
+            more_weight = total_samples / (2 * moreWt_samples)   
+        else:
+            weighted_threshold = None
+            few_weight = None
+            more_weight = None
+        print("weighted_threshold:",weighted_threshold)
+
+        set_seed(seed)
+        dataset = OmicsDrugDataset(omics_data_tensor_dict, drug_features_tensor, response_matrix_tensor, splitType, include_omics)
+        onedrug_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+
+        # eval_targets, eval_outputs,predAUCwithUnknownGT, AttenScorMat_DrugSelf, AttenScorMat_DrugCellSelf,eval_outputs_before_final_activation_list, mean_batch_eval_lossWOpenalty
+        (eval_targets, eval_outputs,predAUCwithUnknownGT,
+        AttenScorMat_DrugSelf ,AttenScorMat_DrugCellSelf,
+        _, 
+        mean_batch_eval_loss_WO_penalty)  = evaluation(model, None,None,
+                                                    criterion, onedrug_loader, device,ESPF,Drug_SelfAttention, 
+                                                    weighted_threshold, few_weight, more_weight, 
+                                                    outputcontrol='inference')
+
+        # Calculate classification metrics                                            
+        drugs_metrics[drug_name] = metrics_calculator(torch.cat(eval_targets), torch.cat(eval_outputs),median_value)
+        
+        print("eval_targets\n",eval_targets)
+        print("eval_outputs\n",eval_outputs)
+
+        plt.rcParams["font.family"] = "serif"
+        plt.rcParams['svg.fonttype'] = 'none'  # Use system fonts in SVG
+        plt.rcParams['pdf.fonttype'] = 42  # Use Type 42 (TrueType) fonts
+        df = pd.DataFrame({'predicted AUDRC': torch.cat(eval_outputs).cpu().numpy(),
+                            'Label': torch.cat(eval_targets).cpu().numpy()})
+        # Perform t-test between the two groups
+        sensitive = df[df['Label'] == 0]['predicted AUDRC']
+        resistant = df[df['Label'] == 1]['predicted AUDRC']
+        t_stat, p_val = ttest_ind(sensitive, resistant)
+        # plot
+        fig, ax = plt.subplots(figsize=(5, 6))
+        sns.boxplot(x='Label', y='predicted AUDRC', data=df, ax=ax)
+        # Title and p-value annotation
+        ax.set_title(f"predicted AUDRC by Label ({drug_name})", fontsize=14)
+        p_text = f"p = {p_val:.4f}"
+        x1, x2 = 0, 1
+        y, h = max(df['predicted AUDRC']) + 0.002, 0.002
+        ax.plot([x1, x1, x2, x2], [y, y+h, y+h, y], lw=1.5, c='k')
+        ax.text((x1+x2) / 2, y+h, p_text, ha='center', va='bottom', fontsize=14, color='red')
+        # Axis labels
+        ax.set_xticklabels([    f'sensitive (n={len(sensitive)})\nlabel=0',
+                                f'resistant (n={len(resistant)})\nlabel=1'], fontsize=14)
+        ax.set_xlabel("Label", fontsize=14)
+        ax.set_ylabel("predicted AUDRC", fontsize=14)
+        plt.tight_layout()
+        plt.show()
+        fig.savefig(f'{hyperparameter_folder_path}/boxplot_predictedAUDRC_{drug_name}_TCGAlabel')
+
+        if criterion.loss_type == "BCE":
+            (test_cm ,  test_GT_0_count, test_GT_1_count, 
+            test_pred_binary_0_count, test_pred_binary_1_count ) =metrics_calculator.confusion_matrix(torch.cat(eval_targets), torch.cat(eval_outputs), median_value)
+
+            drugs_metrics[drug_name]["CM"] = test_cm
+
+            # # plot confusion matrix
+            cm_datas = [(test_cm, 'TCGA', 'Blues')]
+            Confusion_Matrix_plot(cm_datas,hyperparameter_folder_path=hyperparameter_folder_path,drug=drug_name)
+
+            
+        else:
+            device=torch.cat(eval_targets).device
+            median_tensor = torch.tensor(median_value, dtype=torch.float32, device=device)
+            GT = (torch.cat(eval_targets) > median_tensor).int()
+            auroc = torchmetrics.classification.AUROC(task="binary").to(device)(torch.cat(eval_outputs),GT)  # Use raw scores
+            auprc = torchmetrics.classification.AveragePrecision(task="binary").to(device)(torch.cat(eval_outputs),GT) # Use raw scores
+            drugs_metrics[drug_name]["AUROC"] = auroc.item()
+            drugs_metrics[drug_name]["AUPRC"] = auprc.item()
+            drugs_metrics[drug_name][criterion.loss_type] = mean_batch_eval_loss_WO_penalty
+            
+    
+    output_file = f"{hyperparameter_folder_path}/BF{BF}_TCGA_inference_result.txt"
+    with open(output_file, "w") as file:
+        if criterion.loss_type == "BCE":
+            for drug, metrics in drugs_metrics.items():
+                file.write(f"{drug}\n")
+                file.write(f"  test {criterion.loss_type}loss: {mean_batch_eval_loss_WO_penalty:.4f}\n")
+                for key in metrics_type_set:
+                    file.write(f"  '{key}': {metrics[key].item():.4f}\n")
+        else:
+            for drug, metrics in drugs_metrics.items():
+                file.write(f"{drug}\n")
+                for key in ["AUROC", "AUPRC", criterion.loss_type]:
+                    file.write(f"  '{key}': {metrics[key]:.4f}\n")
+    del model
+    torch.cuda.set_device("cuda:0")# Set the current device
+    gc.collect()# Optionally, force garbage collection to release memory 
+    torch.cuda.empty_cache() # Empty PyTorch cache
