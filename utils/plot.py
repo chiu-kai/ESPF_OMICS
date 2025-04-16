@@ -179,7 +179,7 @@ def Confusion_Matrix_plot(datasets,hyperparameter_folder_path=None,drug=None):
         for label in ax.get_xticklabels() + ax.get_yticklabels():
             label.set_fontweight('bold')
         if hyperparameter_folder_path is not None:
-            fig.savefig(f'{hyperparameter_folder_path}/Confusion_Matrix')
+            fig.savefig(f'{hyperparameter_folder_path}/{drug}Confusion_Matrix')
     else:
         fig, axs = plt.subplots(1, 3, figsize=(15, 5))
         for i, (cm, title, color) in enumerate(datasets):
