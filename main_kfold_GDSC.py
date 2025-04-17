@@ -512,7 +512,6 @@ if model_inference is True:
         # print(omics_data_tensor_dict)
         print(drug_features_tensor.shape)# Fc1c[nH]c(=O)[nH]c1=O 
         print(response_matrix_tensor.shape)
-        # print(drug_encode.values)
 
         if 'weighted' in criterion.loss_type :    
             # Set threshold based on the 90th percentile # 將高於threshold的AUC權重增加
@@ -567,8 +566,9 @@ if model_inference is True:
         ax.plot([x1, x1, x2, x2], [y, y+h, y+h, y], lw=1.5, c='k')
         ax.text((x1+x2) / 2, y+h, p_text, ha='center', va='bottom', fontsize=14, color='red')
         # Axis labels
-        ax.set_xticklabels([    f'sensitive (n={len(sensitive)})\nlabel=0',
-                                f'resistant (n={len(resistant)})\nlabel=1'], fontsize=14)
+        ax.set_xticks([0, 1])  # 指定 x 軸兩個類別的位置
+        ax.set_xticklabels([f'sensitive (n={len(sensitive)})\nlabel=0',
+                            f'resistant (n={len(resistant)})\nlabel=1'], fontsize=14)
         ax.set_xlabel("Label", fontsize=14)
         ax.set_ylabel("predicted AUDRC", fontsize=14)
         plt.tight_layout()
@@ -580,12 +580,10 @@ if model_inference is True:
             test_pred_binary_0_count, test_pred_binary_1_count ) =metrics_calculator.confusion_matrix(torch.cat(eval_targets), torch.cat(eval_outputs), median_value)
 
             drugs_metrics[drug_name]["CM"] = test_cm
-
             # # plot confusion matrix
             cm_datas = [(test_cm, 'TCGA', 'Blues')]
             Confusion_Matrix_plot(cm_datas,hyperparameter_folder_path=hyperparameter_folder_path,drug=drug_name)
 
-            
         else:
             device=torch.cat(eval_targets).device
             median_tensor = torch.tensor(median_value, dtype=torch.float32, device=device)

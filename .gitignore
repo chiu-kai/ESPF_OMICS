@@ -11,6 +11,14 @@ utils_old/
 utils_main/
 main.py
 main_kfold_old.py
+Model_old.py
+config_old.py
+train(PDAC).py
+train_evaluation.py
+run.py
+run_ExpMut.py
+run_v2.py
+nn.transformer.py
 MACCS166/
 GDSC_prediction.ipynb
 utils/config.py
