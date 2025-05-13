@@ -9,7 +9,7 @@ class MetricsCalculator_nntorch(nn.Module):
         self.types = types
         self.mse_loss = nn.MSELoss(reduction="mean")
         self.mae_loss = nn.L1Loss(reduction="mean") # reduction (default 'mean')
-    def forward(self, y_true, y_pred, median_value): 
+    def forward(self, y_true, y_pred, prob_threshold ): 
         self.results = {}
         if "MSE" in self.types:
             self.results["MSE"] = self.mse_loss(y_true, y_pred) 
@@ -24,7 +24,7 @@ class MetricsCalculator_nntorch(nn.Module):
             self.results["R^2"] = 1 - (ss_residual / ss_total)
         if "Accuracy" in self.types:
             device=y_true.device
-            median_tensor = torch.tensor(median_value, dtype=torch.float32, device=device)
+            median_tensor = torch.tensor(prob_threshold, dtype=torch.float32, device=device)
             # Binarize labels and predictions based on median threshold
             GT = (y_true > median_tensor).int() # match the type of y_pred
             pred_bi = (y_pred > median_tensor).int()
@@ -44,12 +44,12 @@ class MetricsCalculator_nntorch(nn.Module):
                             "Precision": precision,
                             "F1": f1}
         return self.results
-    def confusion_matrix(self, y_true, y_pred,median_value):  
+    def confusion_matrix(self, y_true, y_pred,prob_threshold):  
         device=y_true.device
-        median_value = torch.tensor(median_value, dtype=torch.float32, device=device)
+        prob_threshold = torch.tensor(prob_threshold, dtype=torch.float32, device=device)
         # Binarize labels and predictions based on median threshold
-        GT = (y_true > median_value).int()
-        pred_bi = (y_pred > median_value).int()
+        GT = (y_true > prob_threshold).int()
+        pred_bi = (y_pred > prob_threshold).int()
         # Count occurrences
         GT_0_count = torch.sum(GT == 0)
         GT_1_count = torch.sum(GT == 1)

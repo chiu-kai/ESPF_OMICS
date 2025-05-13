@@ -1,4 +1,5 @@
-# python3 ./main_kfold_GDSC.py --config utils/config_GDSC.py
+# pip install subword-nmt seaborn lifelines openpyxl matplotlib scikit-learn openTSNE
+# python3 ./main_kfold.py --config utils/config_GDSC.py
 import torch.nn as nn
 from utils.Loss import Custom_LossFunction,Custom_Weighted_LossFunction,FocalLoss
 from utils.Custom_Activation_Function import ScaledSigmoid, ReLU_clamp
@@ -26,7 +27,6 @@ TCGA_pretrain_weight_path_dict = {'Mut': "",
                                   # Add more omics types and paths as needed
                                 }
 seed = 42
-
 #hyperparameter
 model_name = "Omics_DCSA_Model" # Omics_DrugESPF_Model  Omics_DCSA_Model
 AUCtransform = None #"-log2"
@@ -81,8 +81,10 @@ criterion = Custom_LossFunction(loss_type="MAE", loss_lambda=1.0, regular_type=N
 # criterion = FocalHuberLoss(loss_type="FocalHuberLoss",delta=0.2, alpha=0.3, gamma=2.0, regular_type=None, regular_lambda=1e-05)
 if criterion.loss_type == "BCE":
     metrics_type_set = ["Accuracy","AUROC", "AUPRC", "Sensitivity","Specificity", "Precision", "F1"] 
+    prob_threshold=0.5
 else:
     metrics_type_set = ["MSE", "R^2"] #"MSE","MAE"  None
+    prob_threshold=None
 metrics_calculator = MetricsCalculator_nntorch(types = metrics_type_set)
 """ A customizable loss function class.
     Args:

@@ -5,9 +5,11 @@ from utils.Loss import Custom_LossFunction,Custom_Weighted_LossFunction,FocalLos
 from utils.Custom_Activation_Function import ScaledSigmoid, ReLU_clamp
 from utils.Metrics import MetricsCalculator_nntorch
 
+model_inference = True # False
 test = True #False, True: batch_size = 3, num_epoch = 2, full dataset
 drug_df_path= "../data/no_Imputation_PRISM_Repurposing_Secondary_Screen_data/MACCS(Secondary_Screen_treatment_info)_union_NOrepeat.csv"
-AUC_df_path = "../data/no_Imputation_PRISM_Repurposing_Secondary_Screen_data/Drug_sensitivity_AUC_(PRISM_Repurposing_Secondary_Screen)_subsetted_NOrepeat.csv"
+AUC_df_path_numerical = "../data/no_Imputation_PRISM_Repurposing_Secondary_Screen_data/Drug_sensitivity_AUC_(PRISM_Repurposing_Secondary_Screen)_subsetted_NOrepeat.csv" # gdsc1+2_ccle_z-score　gdsc1+2_ccle_AUC
+AUC_df_path = "../data/no_Imputation_PRISM_Repurposing_Secondary_Screen_data/PRISM_AUDRC_binary_label_zscore_cutoff0.7.csv"
 omics_files = {
     'Mut': "../data/CCLE/CCLE_match_TCGAgene_PRISMandEXPsample_binary_mutation_476_6009.txt",
     'Exp': "../data/CCLE/CCLE_exp_476samples_4692genes.txt",
@@ -32,7 +34,7 @@ splitType= 'byCCL' # byCCL byDrug
 kfoldCV = 2
 include_omics = ['Exp']
 DA_Folder = None
-deconfound_EXPembedding = True # False True
+deconfound_EXPembedding = False # False True
 if deconfound_EXPembedding is True:
     DA_Folder = "VAE_w10SC"
     omics_files['Exp'] = f"../data/DAPL/share/pretrain/{DA_Folder}/ccle_latent_results.pkl" #
@@ -73,18 +75,26 @@ warmup_iters = 60
 Decrease_percent = 0.9
 continuous = True
 learning_rate=1e-04
-metrics_type_set = [ "MSE", "R^2"] #"MSE",
-metrics_calculator = MetricsCalculator_nntorch(types = metrics_type_set)
+
 criterion = Custom_LossFunction(loss_type="MAE", loss_lambda=1.0, regular_type=None, regular_lambda=1e-06) #nn.MSELoss()#
-#criterion =  FocalMSELoss(alpha=8.0, gamma=1.0, regular_type=None, regular_lambda=1e-05)
+#criterion =  FocalLoss(loss_type="MSE", alpha=8.0, gamma=1.0, regular_type=None, regular_lambda=1e-05) # loss_type="MSE"/"MAE"
+# criterion = FocalHuberLoss(loss_type="FocalHuberLoss",delta=0.2, alpha=0.3, gamma=2.0, regular_type=None, regular_lambda=1e-05)
+if criterion.loss_type == "BCE":
+    metrics_type_set = ["Accuracy","AUROC", "AUPRC", "Sensitivity","Specificity", "Precision", "F1"] 
+    prob_threshold=0.5
+else:
+    metrics_type_set = ["MSE", "R^2"] #"MSE","MAE"  None
+    prob_threshold=None
+metrics_calculator = MetricsCalculator_nntorch(types = metrics_type_set)
 """ A customizable loss function class.
     Args:
-        loss_type (str): The type of loss to use ("RMSE", "MSE", "MAE", "MAE+MSE", "MAE+RMSE")/("weighted_RMSE", "weighted_MSE", "weighted_MAE", "weighted_MAE+MSE", "weighted_MAE+RMSE").
+        loss_type (str): The type of loss to use ("RMSE", "MSE", "MAE","BCE","MAE+BCE", "MAE+MSE", "MAE+RMSE")/("weighted_RMSE", "weighted_MSE", "weighted_MAE", "weighted_MAE+MSE", "weighted_MAE+RMSE").
         loss_lambda (float): The lambda weight for the additional loss (MSE or RMSE) if applicable. Default is MAE+ 1.0*(MSE or RMSE).
         regular_type (str): The type of regularization to use ("L1", "L2", "L1+L2"), or None for no regularization.
-        regular_lambda (float): The lambda weight for regularization. Default is 1e-05."""
-
-hyperparameter_print = f' omics_dict ={omics_dict}\n omics_files ={omics_files}\n TCGA_pretrain_weight_path_dict ={TCGA_pretrain_weight_path_dict}\n seed ={seed}\n  model_name ={model_name}\n AUCtransform ={AUCtransform}\n splitType ={splitType}\n kfoldCV ={kfoldCV}\n omics_encode_dim ={[(omic_type,omics_encode_dim_dict[omic_type]) for omic_type in include_omics]}\n deconfound_EXPembedding ={deconfound_EXPembedding}\n max_drug_len ={max_drug_len}\n drug_embedding_feature_size ={drug_embedding_feature_size}\n ESPF ={ESPF}\n Drug_SelfAttention ={Drug_SelfAttention}\n n_layer ={n_layer}\n pos_emb_type ={pos_emb_type}\n intermediate_size ={intermediate_size}\n num_attention_heads ={num_attention_heads}\n attention_probs_dropout_prob ={attention_probs_dropout_prob}\n hidden_dropout_prob ={hidden_dropout_prob}\n drug_encode_dims ={drug_encode_dims}\n dense_layer_dim = {dense_layer_dim}\n activation_func = {activation_func}\n activation_func_final = {activation_func_final}\n batch_size = {batch_size}\n num_epoch = {num_epoch}\n patience = {patience}\n warmup_iters = {warmup_iters}\n Decrease_percent = {Decrease_percent}\n continuous ={continuous}\n learning_rate = {learning_rate}\n criterion ={criterion}\n'
+        regular_lambda (float): The lambda weight for regularization. Default is 1e-05.
+        
+        # Binary Cross Entropy Loss # already done sigmoid"""
+hyperparameter_print = f' omics_dict ={omics_dict}\n omics_files ={omics_files}\n TCGA_pretrain_weight_path_dict ={TCGA_pretrain_weight_path_dict}\n seed ={seed}\n  model_name ={model_name}\n AUCtransform ={AUCtransform}\n splitType ={splitType}\n kfoldCV ={kfoldCV}\n omics_encode_dim ={[(omic_type,omics_encode_dim_dict[omic_type]) for omic_type in include_omics]}\n deconfound_EXPembedding ={deconfound_EXPembedding}\n DA_Folder ={DA_Folder}\n max_drug_len ={max_drug_len}\n drug_embedding_feature_size ={drug_embedding_feature_size}\n ESPF ={ESPF}\n Drug_SelfAttention ={Drug_SelfAttention}\n n_layer ={n_layer}\n pos_emb_type ={pos_emb_type}\n intermediate_size ={intermediate_size}\n num_attention_heads ={num_attention_heads}\n attention_probs_dropout_prob ={attention_probs_dropout_prob}\n hidden_dropout_prob ={hidden_dropout_prob}\n drug_encode_dims ={drug_encode_dims}\n dense_layer_dim = {dense_layer_dim}\n activation_func = {activation_func}\n activation_func_final = {activation_func_final}\n batch_size = {batch_size}\n num_epoch = {num_epoch}\n patience = {patience}\n warmup_iters = {warmup_iters}\n Decrease_percent = {Decrease_percent}\n continuous ={continuous}\n learning_rate = {learning_rate}\n criterion ={criterion}\n'
 
 __translation_table__ = str.maketrans({
     "*": "",    "/": "",    ":": "-",    "%": "",
@@ -92,13 +102,3 @@ __translation_table__ = str.maketrans({
     ",": "" })
 
 hyperparameter_folder_part = (f'Model{model_name}_{splitType}_Omics{[omic_type for omic_type in include_omics]}_ESPF{ESPF}_DrugSelfAttention{Drug_SelfAttention}').translate(__translation_table__)
-
-
-
-
-
-
-
-
-
-
