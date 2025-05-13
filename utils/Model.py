@@ -378,8 +378,12 @@ def create_mlpEncoder(dimList, activation_func):
     for i in range(len(dimList) - 1):  
         layers.append(nn.Linear(dimList[i], dimList[i + 1]))
         if i < len(dimList) - 2:  
-            layers.append(activation_func)
+            layers.append(activation_func)        
     return nn.Sequential(*layers)
+#After Commit d16fd58 use def create_mlpEncoder to build mlpEncoder for omics #Commits on Mar 29, 2025 
+        ## if i < len(dimList) - 2:  
+        #layers.append(activation_func)  
+#Before Commit d16fd5
 
 
 # Models------------------------------------------------------------------------------------------------------------------------------------------------------

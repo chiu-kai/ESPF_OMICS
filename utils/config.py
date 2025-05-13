@@ -31,9 +31,11 @@ AUCtransform = None #"-log2"
 splitType= 'byCCL' # byCCL byDrug
 kfoldCV = 2
 include_omics = ['Exp']
+DA_Folder = None
 deconfound_EXPembedding = True # False True
 if deconfound_EXPembedding is True:
-    omics_files['Exp'] = "../data/DAPL/share/pretrain/VAE/ccle_latent_results.pkl" #
+    DA_Folder = "VAE_w10SC"
+    omics_files['Exp'] = f"../data/DAPL/share/pretrain/{DA_Folder}/ccle_latent_results.pkl" #
 max_drug_len=50 # 不夠補零補到50 / 超過取前50個subwords(index) !!!!須改方法!!!! 
 drug_embedding_feature_size = 128
 ESPF = True # False True

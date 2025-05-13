@@ -142,20 +142,37 @@ def correlation_density(model_name,train_pearson,val_pearson,test_pearson,train_
     return plt
 
 # plot Density_Plot_of_AUC_Values of train val test datasets
+import matplotlib as mpl
 def Density_Plot_of_AUC_Values(datasets,hyperparameter_folder_path=None):
+    plt.style.use('default')  # Use default style instead of seaborn
+    plt.rcParams['figure.facecolor'] = 'white'
+    plt.rcParams['axes.facecolor'] = 'white'
+    mpl.rcParams['figure.dpi'] = 300  # Higher resolution
+    mpl.rcParams['savefig.dpi'] = 300
+    mpl.rcParams['figure.figsize'] = (10, 10)  # Slightly larger figure
+    mpl.rcParams['path.simplify'] = True
+    mpl.rcParams['path.simplify_threshold'] = 1.0
+    mpl.rcParams['agg.path.chunksize'] = 10000
+    plt.rcParams['figure.autolayout'] = True
+    plt.rcParams['figure.constrained_layout.use'] = True
+    plt.rcParams['svg.fonttype'] = 'none'  # Use system fonts in SVG
+    plt.rcParams['pdf.fonttype'] = 42  # Use Type 42 (TrueType) fonts
+    plt.rcParams["font.family"] = "serif"
     fig, axs = plt.subplots(1, 3, figsize=(15, 5))
     for i, (targets, outputs, title, color) in enumerate(datasets):
-        sns.kdeplot(torch.cat(targets).tolist(), color=color, label=f'GroundTruthAUC - {title}', ax=axs[i])
-        sns.kdeplot(torch.cat(outputs).tolist(), color=color, linestyle='--', label=f'PredictedAUC - {title}', ax=axs[i])
-        axs[i].set_title(f'{title} Set',fontsize=14)
-        axs[i].set_xlabel('AUC values',fontsize=14)
-        axs[i].legend(loc='upper left',fontsize=10)
+        sns.kdeplot(torch.cat(targets).tolist(), color=color, label=f'GroundTruthAUDRC - {title}', ax=axs[i])
+        sns.kdeplot(torch.cat(outputs).tolist(), color=color, linestyle='--', label=f'PredictedAUDRC - {title}', ax=axs[i])
+        axs[i].set_title(f'{title} Set',fontsize=14,fontweight="bold")
+        axs[i].set_xlabel('AUDRC values',fontsize=14,fontweight="bold")
+        axs[i].set_ylabel('Density', fontsize=14,fontweight="bold")
+        axs[i].legend(loc='upper left',fontsize=12)
     # Set a global title and save the figure
-    fig.suptitle('Density Plot of AUC Values for Train, Val, and Test Sets', fontsize=15)
+    fig.suptitle('Density Plot of AUDRC Values for Train, Val, and Test Sets', fontsize=15)
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     if hyperparameter_folder_path is not None:
         fig.savefig(f'{hyperparameter_folder_path}/Density_Plot_of_AUC_Values')
     return plt
+
 
 def Confusion_Matrix_plot(datasets,hyperparameter_folder_path=None,drug=None):
     plt.rcParams["font.family"] = "serif"
