@@ -25,3 +25,4 @@ utils/config.py
 utils/config_GDSC.py
 ESPF/drug_codes_chembl_freq_1500_testtest.txt
 ESPF/subword_units_map_chembl_freq_1500_testtest.csv
+config.py

@@ -5,14 +5,14 @@ from utils.Loss import Custom_LossFunction,Custom_Weighted_LossFunction,FocalLos
 from utils.Custom_Activation_Function import ScaledSigmoid, ReLU_clamp
 from utils.Metrics import MetricsCalculator_nntorch
 
-model_inference = True # False
+model_inference = False # False
 test = True #False, True: batch_size = 3, num_epoch = 2, full dataset
 drug_df_path= "../data/no_Imputation_PRISM_Repurposing_Secondary_Screen_data/MACCS(Secondary_Screen_treatment_info)_union_NOrepeat.csv"
 AUC_df_path_numerical = "../data/no_Imputation_PRISM_Repurposing_Secondary_Screen_data/Drug_sensitivity_AUC_(PRISM_Repurposing_Secondary_Screen)_subsetted_NOrepeat.csv" # gdsc1+2_ccle_z-score　gdsc1+2_ccle_AUC
 AUC_df_path = "../data/no_Imputation_PRISM_Repurposing_Secondary_Screen_data/PRISM_AUDRC_binary_label_zscore_cutoff0.7.csv"
 omics_files = {
     'Mut': "../data/CCLE/CCLE_match_TCGAgene_PRISMandEXPsample_binary_mutation_476_6009.txt",
-    'Exp': "../data/CCLE/CCLE_exp_476samples_4692genes.txt",
+    'Exp': "../data/CCLE/CCLE_exp_476samples_4692genes.csv",
     # Add more omics types and paths as needed
     }
 omics_dict = {'Mut':0,'Exp':1,'CN':2, 'Eff':3, 'Dep':4, 'Met':5}
@@ -76,15 +76,17 @@ Decrease_percent = 0.9
 continuous = True
 learning_rate=1e-04
 
-criterion = Custom_LossFunction(loss_type="MAE", loss_lambda=1.0, regular_type=None, regular_lambda=1e-06) #nn.MSELoss()#
+criterion = Custom_LossFunction(loss_type="BCE", loss_lambda=1.0, regular_type=None, regular_lambda=1e-06) #nn.MSELoss()#
 #criterion =  FocalLoss(loss_type="MSE", alpha=8.0, gamma=1.0, regular_type=None, regular_lambda=1e-05) # loss_type="MSE"/"MAE"
 # criterion = FocalHuberLoss(loss_type="FocalHuberLoss",delta=0.2, alpha=0.3, gamma=2.0, regular_type=None, regular_lambda=1e-05)
 if criterion.loss_type == "BCE":
     metrics_type_set = ["Accuracy","AUROC", "AUPRC", "Sensitivity","Specificity", "Precision", "F1"] 
-    prob_threshold=0.5
+    metric="F1" # best_prob_threshold_metric
+    best_prob_threshold=0.5
 else:
     metrics_type_set = ["MSE", "R^2"] #"MSE","MAE"  None
-    prob_threshold=None
+    metric=None # best_prob_threshold_metric
+    best_prob_threshold=None
 metrics_calculator = MetricsCalculator_nntorch(types = metrics_type_set)
 """ A customizable loss function class.
     Args:

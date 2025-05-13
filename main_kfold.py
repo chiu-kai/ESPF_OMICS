@@ -59,7 +59,7 @@ else:
 AUC_df_numerical = pd.read_csv(AUC_df_path_numerical, sep=',', index_col=0)
 print(f"exp_df samples: {len(exp_df.index)} , AUC_df_numerical samples: {len(AUC_df_numerical.index)}")
 matched_samples = sorted(set(AUC_df_numerical.index) & set(exp_df.index))
-
+print("len(matched_samples)",len(matched_samples))
 # 讀取omics資料
 set_seed(seed)
 for omic_type in include_omics:
@@ -239,8 +239,8 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
                            'val': BE_val_loss,  # best epoch
                            'test': None,  # Placeholder for test loss
                           }   
-    val_metrics = metrics_calculator(torch.cat(BE_val_targets), torch.cat(BE_val_outputs),prob_threshold)
-    train_metrics = metrics_calculator(torch.cat(BE_train_targets), torch.cat(BE_train_outputs),prob_threshold)
+    train_metrics, best_prob_threshold = metrics_calculator(torch.cat(BE_train_targets), torch.cat(BE_train_outputs), best_prob_threshold, metric,dataset="train")
+    val_metrics, _ = metrics_calculator(torch.cat(BE_val_targets), torch.cat(BE_val_outputs), best_prob_threshold,metric,dataset="val")
 
     kfold_metrics[fold] = {'train': train_metrics, 'val': val_metrics, 'test': None 
                            }   
@@ -255,7 +255,7 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
                                         weighted_threshold, few_weight, more_weight, 
                                         outputcontrol='correlation')
     
-    test_metrics = metrics_calculator(torch.cat(BE_test_targets), torch.cat(BE_test_outputs),prob_threshold)
+    test_metrics, _  = metrics_calculator(torch.cat(BE_test_targets), torch.cat(BE_test_outputs),best_prob_threshold,metric,dataset="test")
 
     kfold_losses[fold]['test'] = test_loss_WO_penalty
     kfold_metrics[fold]['test'] = test_metrics
@@ -286,7 +286,7 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     # Empty PyTorch cache
     torch.cuda.empty_cache() # model 會從GPU消失，所以要evaluation時要重新load model
 # Saving the model weughts
-hyperparameter_folder_path = f'./results_GDSC/BF{BF}_{criterion.loss_type}_test_loss{BF_test_loss:.7f}_BestValEpo{BF_best_epoch}_{hyperparameter_folder_part}_nlayer{n_layer}_DA{deconfound_EXPembedding}' # /root/Winnie/PDAC
+hyperparameter_folder_path = f'./results/BF{BF}_{criterion.loss_type}_test_loss{BF_test_loss:.7f}_BestValEpo{BF_best_epoch}_{hyperparameter_folder_part}_nlayer{n_layer}_DA{deconfound_EXPembedding}' # /root/Winnie/PDAC
 os.makedirs(hyperparameter_folder_path, exist_ok=True)
 save_path = os.path.join(hyperparameter_folder_path, f'BestValWeight.pt')
 torch.save(BF_best_weight, save_path)
@@ -339,11 +339,11 @@ if criterion.loss_type != "BCE":
 
 if criterion.loss_type == "BCE":
     (train_cm , train_GT_0_count, train_GT_1_count, 
-    train_pred_binary_0_count, train_pred_binary_1_count) =metrics_calculator.confusion_matrix(torch.cat(BF_train_targets), torch.cat(BF_train_outputs), prob_threshold)
+    train_pred_binary_0_count, train_pred_binary_1_count) =metrics_calculator.confusion_matrix(torch.cat(BF_train_targets), torch.cat(BF_train_outputs), best_prob_threshold)
     (val_cm ,  val_GT_0_count, val_GT_1_count, 
-    val_pred_binary_0_count, val_pred_binary_1_count ) =metrics_calculator.confusion_matrix(torch.cat(BF_val_targets), torch.cat(BF_val_outputs), prob_threshold)
+    val_pred_binary_0_count, val_pred_binary_1_count ) =metrics_calculator.confusion_matrix(torch.cat(BF_val_targets), torch.cat(BF_val_outputs), best_prob_threshold)
     (test_cm ,  test_GT_0_count, test_GT_1_count, 
-    test_pred_binary_0_count, test_pred_binary_1_count ) =metrics_calculator.confusion_matrix(torch.cat(BF_test_targets), torch.cat(BF_test_outputs), prob_threshold)
+    test_pred_binary_0_count, test_pred_binary_1_count ) =metrics_calculator.confusion_matrix(torch.cat(BF_test_targets), torch.cat(BF_test_outputs), best_prob_threshold)
 
     # plot confusion matrix
     cm_datas = [(train_cm, 'Train', 'Reds'),  (val_cm, 'Validation', 'Greens'),   (test_cm, 'Test', 'Blues')]
@@ -541,7 +541,7 @@ if model_inference is True:
                                                     outputcontrol='inference')
 
         # Calculate classification metrics                                            
-        drugs_metrics[drug_name] = metrics_calculator(torch.cat(eval_targets), torch.cat(eval_outputs),prob_threshold)
+        drugs_metrics[drug_name], _  = metrics_calculator(torch.cat(eval_targets), torch.cat(eval_outputs), best_prob_threshold,dataset="test")
         
         print("eval_targets\n",eval_targets)
         print("eval_outputs\n",eval_outputs)
@@ -577,7 +577,7 @@ if model_inference is True:
 
         if criterion.loss_type == "BCE":
             (test_cm ,  test_GT_0_count, test_GT_1_count, 
-            test_pred_binary_0_count, test_pred_binary_1_count ) =metrics_calculator.confusion_matrix(torch.cat(eval_targets), torch.cat(eval_outputs), prob_threshold)
+            test_pred_binary_0_count, test_pred_binary_1_count ) =metrics_calculator.confusion_matrix(torch.cat(eval_targets), torch.cat(eval_outputs), best_prob_threshold)
 
             drugs_metrics[drug_name]["CM"] = test_cm
             # # plot confusion matrix

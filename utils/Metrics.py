@@ -9,7 +9,34 @@ class MetricsCalculator_nntorch(nn.Module):
         self.types = types
         self.mse_loss = nn.MSELoss(reduction="mean")
         self.mae_loss = nn.L1Loss(reduction="mean") # reduction (default 'mean')
-    def forward(self, y_true, y_pred, prob_threshold ): 
+    def _find_best_threshold(self, y_true, y_pred, metric="F1", thresholds=torch.linspace(0.0, 1.0, steps=100)):
+        """
+        Find the best threshold that maximizes the given metric (default: F1).
+        Supported metrics: "F1", "Accuracy", "Precision", "Recall"
+        """
+        y_true = y_true.detach()
+        y_pred = y_pred.detach()
+        best_thresh = 0.5
+        best_score = -1.0
+        metric_class = { "F1": torchmetrics.classification.F1Score(task="binary"),
+                         "Accuracy": torchmetrics.classification.Accuracy(task="binary"),
+                         "Precision": torchmetrics.classification.Precision(task="binary"),
+                         "Recall": torchmetrics.classification.Recall(task="binary"),
+                         "Specificity": torchmetrics.classification.Specificity(task="binary")
+        }
+        if metric not in metric_class:
+            return best_thresh
+        else:
+            metric_func = metric_class[metric].to(y_true.device)
+            for thresh in thresholds:
+                pred_bi = (y_pred > thresh).int()
+                GT = (y_true > 0.5).int()  # assuming original labels are probabilities or continuous
+                score = metric_func(pred_bi, GT)
+                if score > best_score:
+                    best_score = score
+                    best_thresh = thresh.item()
+            return best_thresh
+    def forward(self, y_true, y_pred, best_prob_threshold, metric, dataset=""): 
         self.results = {}
         if "MSE" in self.types:
             self.results["MSE"] = self.mse_loss(y_true, y_pred) 
@@ -23,11 +50,13 @@ class MetricsCalculator_nntorch(nn.Module):
             ss_residual = torch.sum((y_true - y_pred) ** 2)
             self.results["R^2"] = 1 - (ss_residual / ss_total)
         if "Accuracy" in self.types:
+            if dataset == "train":
+                best_prob_threshold = self._find_best_threshold(y_true, y_pred, metric=metric, thresholds=torch.linspace(0.0, 1.0, steps=100))
             device=y_true.device
-            median_tensor = torch.tensor(prob_threshold, dtype=torch.float32, device=device)
-            # Binarize labels and predictions based on median threshold
-            GT = (y_true > median_tensor).int() # match the type of y_pred
-            pred_bi = (y_pred > median_tensor).int()
+            best_prob_threshold = torch.tensor(best_prob_threshold, dtype=torch.float32, device=device)
+            # Binarize labels and predictions based on best_prob_threshold
+            GT = (y_true > best_prob_threshold).int() # in order to match the type of y_pred # GT already binarized
+            pred_bi = (y_pred > best_prob_threshold).int()
             # Compute metrics using torchmetrics
             accuracy = torchmetrics.classification.Accuracy(task="binary").to(device)(pred_bi, GT)
             auroc = torchmetrics.classification.AUROC(task="binary").to(device)(y_pred, GT)  # Use raw scores
@@ -43,20 +72,19 @@ class MetricsCalculator_nntorch(nn.Module):
                             "Specificity": specificity,
                             "Precision": precision,
                             "F1": f1}
-        return self.results
-    def confusion_matrix(self, y_true, y_pred,prob_threshold):  
-        device=y_true.device
-        prob_threshold = torch.tensor(prob_threshold, dtype=torch.float32, device=device)
-        # Binarize labels and predictions based on median threshold
-        GT = (y_true > prob_threshold).int()
-        pred_bi = (y_pred > prob_threshold).int()
+        return self.results, best_prob_threshold
+        
+    def confusion_matrix(self, y_true, y_pred, best_prob_threshold):
+        # Binarize labels and predictions based on prob_threshold
+        GT = (y_true > best_prob_threshold).int()
+        pred_bi = (y_pred > best_prob_threshold).int()
         # Count occurrences
         GT_0_count = torch.sum(GT == 0)
         GT_1_count = torch.sum(GT == 1)
         pred_binary_0_count = torch.sum(pred_bi == 0)
         pred_binary_1_count = torch.sum(pred_bi == 1)
         # Compute confusion matrix
-        cm = torchmetrics.classification.ConfusionMatrix(task="binary", num_classes=2).to(device)(pred_bi, GT)
+        cm = torchmetrics.classification.ConfusionMatrix(task="binary", num_classes=2).to(y_true.device)(pred_bi, GT)
         # self.results["TP"] = cm[1, 1]  # True Positives
         # self.results["TN"] = cm[0, 0]  # True Negatives
         # self.results["FP"] = cm[0, 1]  # False Positives
