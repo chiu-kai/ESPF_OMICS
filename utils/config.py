@@ -6,6 +6,9 @@ from utils.Custom_Activation_Function import ScaledSigmoid, ReLU_clamp
 from utils.Metrics import MetricsCalculator_nntorch
 
 model_inference = False # False
+if model_inference is True:
+    tcgadata_gene = "tcgadata_4692genes"
+    tcgalabel_gene = "tcgalabel_4692genes"
 test = True #False, True: batch_size = 3, num_epoch = 2, full dataset
 drug_df_path= "../data/no_Imputation_PRISM_Repurposing_Secondary_Screen_data/MACCS(Secondary_Screen_treatment_info)_union_NOrepeat.csv"
 AUC_df_path_numerical = "../data/no_Imputation_PRISM_Repurposing_Secondary_Screen_data/Drug_sensitivity_AUC_(PRISM_Repurposing_Secondary_Screen)_subsetted_NOrepeat.csv" # gdsc1+2_ccle_z-score　gdsc1+2_ccle_AUC

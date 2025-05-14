@@ -460,11 +460,11 @@ if model_inference is True:
                 latent_dict = pickle.load(f)
                 TCGAexp_df = pd.DataFrame(latent_dict).T # 32
         else:
-            # TCGAexp_df = pd.read_csv(f"../data/DAPL/share/PDTC_indiv_fromDAPL/{drug_name}/pdtcdata.csv", sep=',', index_col=0)
-            TCGAexp_df = pd.read_csv(f"../data/DAPL/share/TCGA_fromDAPL/{drug_name}/tcgadata.csv", sep=',', index_col=0) #1426
-        # label_df = pd.read_csv(f"../data/DAPL/share/PDTC_indiv_fromDAPL/{drug_name}/pdtclabel.csv", sep=',', index_col=0)
-        label_df = pd.read_csv(f"../data/DAPL/share/TCGA_fromDAPL/{drug_name}/tcgalabel.csv", sep=',', index_col=0)
-        label_df = 1 - label_df # make label 0 to 1, 1 to 0 to match predicted output. after that 0: sensitive, 1: resistant
+            # TCGAexp_df = pd.read_csv(f"../data/DAPL/share/PDTC_fromDAPL/{drug_name}/pdtcdata.csv", sep=',', index_col=0)
+            TCGAexp_df = pd.read_csv(f"../data/DAPL/share/TCGA_fromDAPL/{drug_name}/{tcgadata_gene}.csv", sep=',', index_col=0) #1426
+        # label_df = pd.read_csv(f"../data/DAPL/share/PDTC_fromDAPL/{drug_name}/pdtclabel.csv", sep=',', index_col=0)
+        label_df = pd.read_csv(f"../data/DAPL/share/TCGA_fromDAPL/{drug_name}/{tcgalabel_gene}.csv", sep=',', index_col=0)
+        # label_df = 1 - label_df # make label 0 to 1, 1 to 0 to match predicted output. after that 0: sensitive, 1: resistant
         print(f"TCGAexp {drug_name}data",TCGAexp_df.shape)
         print(f"label_df {drug_name}data",label_df.shape)
         for omic_type in include_omics:
@@ -543,8 +543,8 @@ if model_inference is True:
         # Calculate classification metrics                                            
         drugs_metrics[drug_name], _  = metrics_calculator(torch.cat(eval_targets), torch.cat(eval_outputs), best_prob_threshold,dataset="test")
         
-        print("eval_targets\n",eval_targets)
-        print("eval_outputs\n",eval_outputs)
+        print("eval_targets\n",eval_targets.shape)
+        print("eval_outputs\n",eval_outputs.shape)
 
         plt.rcParams["font.family"] = "serif"
         plt.rcParams['svg.fonttype'] = 'none'  # Use system fonts in SVG
