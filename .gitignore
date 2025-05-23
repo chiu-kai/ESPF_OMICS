@@ -21,9 +21,9 @@ run_v2.py
 nn.transformer.py
 MACCS166/
 GDSC_prediction.ipynb
-utils/config.py
-utils/config_GDSC.py
 ESPF/drug_codes_chembl_freq_1500_testtest.txt
 ESPF/subword_units_map_chembl_freq_1500_testtest.csv
 config.py
-utils/config.py
+run_experiment*.sh
+utils/config*.py
+weight.tar

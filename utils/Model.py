@@ -448,31 +448,31 @@ class Omics_DrugESPF_Model(nn.Module):
 
             self.MLP4ESPF = nn.Sequential(
                 nn.Linear(max_drug_len * hidden_size, drug_encode_dims[0]),
+                activation_func,
+                nn.Dropout(hidden_dropout_prob),
                 nn.BatchNorm1d(drug_encode_dims[0]),
-                activation_func,
-                nn.Dropout(hidden_dropout_prob),
                 nn.Linear(drug_encode_dims[0], drug_encode_dims[1]),
-                nn.BatchNorm1d(drug_encode_dims[1]),
                 activation_func,
                 nn.Dropout(hidden_dropout_prob),
+                nn.BatchNorm1d(drug_encode_dims[1]),
                 nn.Linear(drug_encode_dims[1], drug_encode_dims[2]),
-                nn.BatchNorm1d(drug_encode_dims[2]),
-                activation_func)
+                activation_func,
+                nn.BatchNorm1d(drug_encode_dims[2]))
             # Initialize weights with Kaiming uniform initialization, bias with aero
             self._init_weights(self.MLP4ESPF)
         else: # MACCS166
             self.MLP4MACCS = nn.Sequential( # 166->[110,55,22]
                 nn.Linear(166, drug_encode_dims[0]),
-                nn.BatchNorm1d(drug_encode_dims[0]),
                 activation_func,
+                nn.BatchNorm1d(drug_encode_dims[0]),
                 # nn.Dropout(hidden_dropout_prob),
                 nn.Linear(drug_encode_dims[0], drug_encode_dims[1]),
-                nn.BatchNorm1d(drug_encode_dims[1]),
                 activation_func,
+                nn.BatchNorm1d(drug_encode_dims[1]),
                 # nn.Dropout(hidden_dropout_prob),
                 nn.Linear(drug_encode_dims[1], drug_encode_dims[2]),
-                nn.BatchNorm1d(drug_encode_dims[2]),
-                activation_func)
+                activation_func,
+                nn.BatchNorm1d(drug_encode_dims[2]))
             # Initialize weights with Kaiming uniform initialization, bias with aero
             self._init_weights(self.MLP4MACCS)
   
@@ -643,16 +643,16 @@ class Omics_DCSA_Model(nn.Module):
 # Define the final prediction network 
         self.model_final_add = nn.Sequential(
             nn.Linear(drug_encode_dims[0], drug_encode_dims[1]),
+            activation_func,
+            nn.Dropout(p=0.1),
             nn.BatchNorm1d(drug_encode_dims[1]), 
-            activation_func,
-            nn.Dropout(p=0.1),
             nn.Linear(drug_encode_dims[1], drug_encode_dims[2]),
-            nn.BatchNorm1d(drug_encode_dims[2]), 
             activation_func,
             nn.Dropout(p=0.1),
+            nn.BatchNorm1d(drug_encode_dims[2]), 
             nn.Linear(drug_encode_dims[2], drug_encode_dims[3]),
             activation_func_final)
-        # Initialize weights with Kaiming uniform initialization, bias with aero
+        # Initialize weights with Kaiming uniform initialization, bias with zero
         self._init_weights(self.model_final_add)
 
         self.print_flag = True

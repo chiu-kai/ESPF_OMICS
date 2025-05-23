@@ -22,6 +22,7 @@ import importlib.util
 import pickle
 import torchmetrics
 from scipy.stats import ttest_ind
+import time
 
 from utils.ESPF_drug2emb import drug2emb_encoder
 from utils.Model import Omics_DrugESPF_Model, Omics_DCSA_Model
@@ -46,6 +47,10 @@ for key, value in vars(config).items():
     if not key.startswith("_"):  # 過濾內部變數，例如 __builtins__
         globals()[key] = value
 
+# information
+struct_time   = time.localtime()
+timestamp    = time.strftime("%Y-%m%d-%H%M", struct_time)
+
 device = (torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'))
 print(f"Training on device {device}.")
 
@@ -62,6 +67,8 @@ matched_samples = sorted(set(AUC_df_numerical.index) & set(exp_df.index))
 print("len(matched_samples)",len(matched_samples))
 # 讀取omics資料
 set_seed(seed)
+
+scaler_dict = {}  # To store scalers for each omic_type
 for omic_type in include_omics:
     if deconfound_EXPembedding is True:
         omics_data_dict[omic_type] = exp_df.loc[matched_samples]
@@ -70,6 +77,7 @@ for omic_type in include_omics:
         if omic_type == "Exp":# apply Column-wise Standardization 
             scaler = StandardScaler() 
             omics_data_dict[omic_type] = pd.DataFrame(scaler.fit_transform(omics_data_dict[omic_type]),index=omics_data_dict[omic_type].index,columns=omics_data_dict[omic_type].columns)
+            scaler_dict[omic_type] = scaler  # save the fitted scaler for latter inference
     if test is True:
         # Specify the index as needed
         omics_data_dict[omic_type] = omics_data_dict[omic_type][:76]  # Adjust the row selection as needed
@@ -239,8 +247,8 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
                            'val': BE_val_loss,  # best epoch
                            'test': None,  # Placeholder for test loss
                           }   
-    train_metrics, best_prob_threshold = metrics_calculator(torch.cat(BE_train_targets), torch.cat(BE_train_outputs), best_prob_threshold, metric,dataset="train")
-    val_metrics, _ = metrics_calculator(torch.cat(BE_val_targets), torch.cat(BE_val_outputs), best_prob_threshold,metric,dataset="val")
+    train_metrics, best_prob_threshold = metrics_calculator(torch.cat(BE_train_targets), torch.cat(BE_train_outputs), best_prob_threshold, metric, dataset="train")
+    val_metrics, _ = metrics_calculator(torch.cat(BE_val_targets), torch.cat(BE_val_outputs), best_prob_threshold, metric ,dataset="val")
 
     kfold_metrics[fold] = {'train': train_metrics, 'val': val_metrics, 'test': None 
                            }   
@@ -255,7 +263,7 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
                                         weighted_threshold, few_weight, more_weight, 
                                         outputcontrol='correlation')
     
-    test_metrics, _  = metrics_calculator(torch.cat(BE_test_targets), torch.cat(BE_test_outputs),best_prob_threshold,metric,dataset="test")
+    test_metrics, _  = metrics_calculator(torch.cat(BE_test_targets), torch.cat(BE_test_outputs),best_prob_threshold, metric, dataset="test")
 
     kfold_losses[fold]['test'] = test_loss_WO_penalty
     kfold_metrics[fold]['test'] = test_metrics
@@ -286,7 +294,7 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     # Empty PyTorch cache
     torch.cuda.empty_cache() # model 會從GPU消失，所以要evaluation時要重新load model
 # Saving the model weughts
-hyperparameter_folder_path = f'./results/BF{BF}_{criterion.loss_type}_test_loss{BF_test_loss:.7f}_BestValEpo{BF_best_epoch}_{hyperparameter_folder_part}_nlayer{n_layer}_DA{deconfound_EXPembedding}' # /root/Winnie/PDAC
+hyperparameter_folder_path = f'./results/{timestamp}_BF{BF}_{criterion.loss_type}_test_loss{BF_test_loss:.7f}_BestValEpo{BF_best_epoch}_{hyperparameter_folder_part}_nlayer{n_layer}_DA{deconfound_EXPembedding}' # /root/Winnie/PDAC
 os.makedirs(hyperparameter_folder_path, exist_ok=True)
 save_path = os.path.join(hyperparameter_folder_path, f'BestValWeight.pt')
 torch.save(BF_best_weight, save_path)
@@ -437,7 +445,7 @@ with open(output_file, "w") as file:
     file.write(f"BF_test_outputs_before_final_activation_list\n{BF_test_outputs_before_final_activation_list[0][:10]}\n")
     file.write(f"BF_test_outputs\n{BF_test_outputs[0][:10]}\n")
     print("Output saved to:", output_file)
-
+    os.chmod(output_file, 0o444)
 
 if model_inference is True:
     set_seed(seed)
@@ -472,15 +480,15 @@ if model_inference is True:
                 omics_data_dict["Exp"] = TCGAexp_df
             else:
                 if omic_type == "Exp":
-                    scaler = StandardScaler() 
-                    omics_data_dict[omic_type] = pd.DataFrame(scaler.fit_transform(TCGAexp_df),index=TCGAexp_df.index,columns=TCGAexp_df.columns)
+                    scaler = scaler_dict[omic_type]
+                    omics_data_dict[omic_type] = pd.DataFrame(scaler.transform(TCGAexp_df),index=TCGAexp_df.index,columns=TCGAexp_df.columns) # use fitted CCLE scaler to transform TCGA data
             omics_data_tensor_dict[omic_type]  = torch.tensor(omics_data_dict[omic_type].values, dtype=torch.float32).to(device)
             omics_numfeatures_dict[omic_type] = omics_data_tensor_dict[omic_type].shape[1]
 
             print(f"{omic_type} tensor shape:", omics_data_tensor_dict[omic_type].shape)
             print(f"{omic_type} num_features",omics_numfeatures_dict[omic_type])
 
-        drug_df_path= "../data/DAPL/share/GDSC_drug_merge_pubchem_dropNA.csv"
+        drug_df_path= "../data/DAPL/share/GDSC_drug_merge_pubchem_dropNA_MACCS.csv"
         drug_df = pd.read_csv( drug_df_path, sep=',', index_col=0)
         # get specific drug and ccl
         drug_df= drug_df[drug_df['name'] == drug_name]
@@ -500,7 +508,7 @@ if model_inference is True:
         else:
             drug_encode = drug_df["MACCS166bits"]
             drug_encode_list = [list(map(int, item.split(','))) for item in drug_encode.values]
-            print("MACCS166bits_drug_encode_list type: ",type(drug_encode_list))
+            print("MACCS166bits_drug_encode_list type: ")# ,type(drug_encode_list))
             # Convert your data to tensors if they're in numpy
             drug_features_tensor = torch.tensor(np.array(drug_encode_list), dtype=torch.long).to(device)
         #--------------------------------------------------------------------------------------------------------------------------
@@ -534,46 +542,43 @@ if model_inference is True:
         # eval_targets, eval_outputs,predAUCwithUnknownGT, AttenScorMat_DrugSelf, AttenScorMat_DrugCellSelf,eval_outputs_before_final_activation_list, mean_batch_eval_lossWOpenalty
         (eval_targets, eval_outputs,predAUCwithUnknownGT,
         AttenScorMat_DrugSelf ,AttenScorMat_DrugCellSelf,
-        _, 
+        eval_outputs_before_final_activation_list,  
         mean_batch_eval_loss_WO_penalty)  = evaluation(model, None,None,
                                                     criterion, onedrug_loader, device,ESPF,Drug_SelfAttention, 
                                                     weighted_threshold, few_weight, more_weight, 
                                                     outputcontrol='inference')
 
         # Calculate classification metrics                                            
-        drugs_metrics[drug_name], _  = metrics_calculator(torch.cat(eval_targets), torch.cat(eval_outputs), best_prob_threshold,dataset="test")
-        
-        print("eval_targets\n",eval_targets.shape)
-        print("eval_outputs\n",eval_outputs.shape)
+        drugs_metrics[drug_name], _  = metrics_calculator(torch.cat(eval_targets), torch.cat(eval_outputs), best_prob_threshold, metric, dataset="test")
 
-        plt.rcParams["font.family"] = "serif"
-        plt.rcParams['svg.fonttype'] = 'none'  # Use system fonts in SVG
-        plt.rcParams['pdf.fonttype'] = 42  # Use Type 42 (TrueType) fonts
-        df = pd.DataFrame({'predicted AUDRC': torch.cat(eval_outputs).cpu().numpy(),
-                            'Label': torch.cat(eval_targets).cpu().numpy()})
-        # Perform t-test between the two groups
-        sensitive = df[df['Label'] == 0]['predicted AUDRC']
-        resistant = df[df['Label'] == 1]['predicted AUDRC']
-        t_stat, p_val = ttest_ind(sensitive, resistant)
-        # plot
-        fig, ax = plt.subplots(figsize=(5, 6))
-        sns.boxplot(x='Label', y='predicted AUDRC', data=df, ax=ax)
-        # Title and p-value annotation
-        ax.set_title(f"predicted AUDRC by Label ({drug_name})", fontsize=14)
-        p_text = f"p = {p_val:.4f}"
-        x1, x2 = 0, 1
-        y, h = max(df['predicted AUDRC']) + 0.002, 0.002
-        ax.plot([x1, x1, x2, x2], [y, y+h, y+h, y], lw=1.5, c='k')
-        ax.text((x1+x2) / 2, y+h, p_text, ha='center', va='bottom', fontsize=14, color='red')
-        # Axis labels
-        ax.set_xticks([0, 1])  # 指定 x 軸兩個類別的位置
-        ax.set_xticklabels([f'sensitive (n={len(sensitive)})\nlabel=0',
-                            f'resistant (n={len(resistant)})\nlabel=1'], fontsize=14)
-        ax.set_xlabel("Label", fontsize=14)
-        ax.set_ylabel("predicted AUDRC", fontsize=14)
-        plt.tight_layout()
-        plt.show()
-        fig.savefig(f'{hyperparameter_folder_path}/boxplot_predictedAUDRC_{drug_name}_TCGAlabel')
+#         plt.rcParams["font.family"] = "serif"
+#         plt.rcParams['svg.fonttype'] = 'none'  # Use system fonts in SVG
+#         plt.rcParams['pdf.fonttype'] = 42  # Use Type 42 (TrueType) fonts
+#         df = pd.DataFrame({'predicted AUDRC': torch.cat(eval_outputs).cpu().numpy(),
+#                             'Label': torch.cat(eval_targets).cpu().numpy()})
+#         # Perform t-test between the two groups
+#         sensitive = df[df['Label'] == 0]['predicted AUDRC']
+#         resistant = df[df['Label'] == 1]['predicted AUDRC']
+#         t_stat, p_val = ttest_ind(sensitive, resistant)
+#         # plot
+#         fig, ax = plt.subplots(figsize=(5, 6))
+#         sns.boxplot(x='Label', y='predicted AUDRC', data=df, ax=ax)
+#         # Title and p-value annotation
+#         ax.set_title(f"predicted AUDRC by Label ({drug_name})", fontsize=14)
+#         p_text = f"p = {p_val:.4f}"
+#         x1, x2 = 0, 1
+#         y, h = max(df['predicted AUDRC']) + 0.002, 0.002
+#         ax.plot([x1, x1, x2, x2], [y, y+h, y+h, y], lw=1.5, c='k')
+#         ax.text((x1+x2) / 2, y+h, p_text, ha='center', va='bottom', fontsize=14, color='red')
+#         # Axis labels
+#         ax.set_xticks([0, 1])  # 指定 x 軸兩個類別的位置
+#         ax.set_xticklabels([f'sensitive (n={len(sensitive)})\nlabel=0',
+#                             f'resistant (n={len(resistant)})\nlabel=1'], fontsize=14)
+#         ax.set_xlabel("Label", fontsize=14)
+#         ax.set_ylabel("predicted AUDRC", fontsize=14)
+#         plt.tight_layout()
+#         plt.show()
+#         fig.savefig(f'{hyperparameter_folder_path}/boxplot_predictedAUDRC_{drug_name}_TCGAlabel')
 
         if criterion.loss_type == "BCE":
             (test_cm ,  test_GT_0_count, test_GT_1_count, 
@@ -601,6 +606,7 @@ if model_inference is True:
         if criterion.loss_type == "BCE":
             for drug, metrics in drugs_metrics.items():
                 file.write(f"{drug}\n")
+                file.write(f"best_prob_threshold: {best_prob_threshold} according to {metric}\n")
                 file.write(f"  test {criterion.loss_type}loss: {mean_batch_eval_loss_WO_penalty:.4f}\n")
                 for key in metrics_type_set:
                     file.write(f"  '{key}': {metrics[key].item():.4f}\n")
@@ -609,6 +615,10 @@ if model_inference is True:
                 file.write(f"{drug}\n")
                 for key in ["AUROC", "AUPRC", criterion.loss_type]:
                     file.write(f"  '{key}': {metrics[key]:.4f}\n")
+        file.write(f"eval_targets\n{eval_targets[0][:20]}\n")
+        file.write(f"eval_outputs_before_final_activation_list\n{eval_outputs_before_final_activation_list[0][:20]}\n")
+        file.write(f"eval_outputs\n{eval_outputs[0][:20]}\n")       
+    os.chmod(output_file, 0o444)
     del model
     torch.cuda.set_device("cuda:0")# Set the current device
     gc.collect()# Optionally, force garbage collection to release memory 

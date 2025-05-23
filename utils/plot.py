@@ -76,7 +76,12 @@ def loss_curve(model_name, train_epoch_loss_list, val_epoch_loss_list, best_epoc
         plt.ylim(top=1.5, bottom=0)
     else:
         plt.ylim(top=None, bottom=None)
-    fig.savefig(os.path.join(hyperparameter_folder_path, f'train_valid_{loss_type}_curve.png'))
+    output_file = os.path.join(hyperparameter_folder_path, f'train_valid_{loss_type}_curve.png')
+    try:
+        fig.savefig(output_file)
+        os.chmod(output_file, 0o444)
+    except Exception as e:
+        print(f"Error occurred while saving or setting permissions for {output_file}: {str(e)}")
     return plt
     
 
@@ -139,6 +144,15 @@ def correlation_density(model_name,train_pearson,val_pearson,test_pearson,train_
     plt.legend(loc='upper left',fontsize=10) 
     fig.suptitle(f'Density Plot of Correlation {model_name}', fontsize=16)
     fig.savefig(f'{hyperparameter_folder_path}/Density_Plot_of_Correlation')
+    output_file = os.path.join(hyperparameter_folder_path, 'Density_Plot_of_Correlation.png')
+    try:
+        fig.savefig(output_file)
+        if platform.system() == "Windows":
+            os.system(f'attrib +r "{output_file}"')
+        else:
+            os.chmod(output_file, 0o444)
+    except Exception as e:
+        print(f"Error occurred while saving or setting permissions for {output_file}: {str(e)}")
     return plt
 
 # plot Density_Plot_of_AUC_Values of train val test datasets
@@ -170,7 +184,13 @@ def Density_Plot_of_AUC_Values(datasets,hyperparameter_folder_path=None):
     fig.suptitle('Density Plot of AUDRC Values for Train, Val, and Test Sets', fontsize=15)
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     if hyperparameter_folder_path is not None:
-        fig.savefig(f'{hyperparameter_folder_path}/Density_Plot_of_AUC_Values')
+        output_file = os.path.join(hyperparameter_folder_path, 'Density_Plot_of_AUC_Values.png')
+        try:
+            fig.savefig(output_file)
+            os.chmod(output_file, 0o444)
+            print(f"✅ Set read-only permissions on: {output_file}")
+        except Exception as e:
+            print(f"⚠️ Failed to set permissions: {e}")
     return plt
 
 
@@ -196,7 +216,13 @@ def Confusion_Matrix_plot(datasets,hyperparameter_folder_path=None,drug=None):
         for label in ax.get_xticklabels() + ax.get_yticklabels():
             label.set_fontweight('bold')
         if hyperparameter_folder_path is not None:
-            fig.savefig(f'{hyperparameter_folder_path}/{drug}Confusion_Matrix')
+            output_file = os.path.join(hyperparameter_folder_path, f'{drug}Confusion_Matrix.png')
+            try:
+                fig.savefig(output_file)
+                os.chmod(output_file, 0o444)
+                print(f"✅ Set read-only permissions on: {output_file}")
+            except Exception as e:
+                print(f"⚠️ Failed to set permissions: {e}")
     else:
         fig, axs = plt.subplots(1, 3, figsize=(15, 5))
         for i, (cm, title, color) in enumerate(datasets):
@@ -217,7 +243,13 @@ def Confusion_Matrix_plot(datasets,hyperparameter_folder_path=None,drug=None):
         fig.suptitle('Confusion Matrix for Train, Val, and Test Sets', fontsize=20, fontweight='bold')
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         if hyperparameter_folder_path is not None:
-            fig.savefig(f'{hyperparameter_folder_path}/Confusion_Matrix')
+            output_file = os.path.join(hyperparameter_folder_path, 'Confusion_Matrix.png')
+            try:
+                fig.savefig(output_file)
+                os.chmod(output_file, 0o444)
+                print(f"✅ Set read-only permissions on: {output_file}")
+            except Exception as e:
+                print(f"⚠️ Failed to set permissions: {e}")
     return plt
 
 
