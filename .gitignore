@@ -24,6 +24,4 @@ GDSC_prediction.ipynb
 ESPF/drug_codes_chembl_freq_1500_testtest.txt
 ESPF/subword_units_map_chembl_freq_1500_testtest.csv
 config.py
-run_experiment*.sh
-utils/config*.py
 weight.tar
