@@ -59,9 +59,12 @@ if deconfound_EXPembedding is True:
     with open(omics_files['Exp'], 'rb') as f:
         latent_dict = pickle.load(f)
         exp_df = pd.DataFrame(latent_dict).T
+        
 else:
     exp_df = pd.read_csv(omics_files["Exp"], sep=',', index_col=0)
+exp_df = exp_df.sort_index(axis=0).sort_index(axis=1)
 AUC_df_numerical = pd.read_csv(AUC_df_path_numerical, sep=',', index_col=0)
+AUC_df_numerical = AUC_df_numerical.sort_index(axis=0).sort_index(axis=1)
 print(f"exp_df samples: {len(exp_df.index)} , AUC_df_numerical samples: {len(AUC_df_numerical.index)}")
 matched_samples = sorted(set(AUC_df_numerical.index) & set(exp_df.index))
 print("len(matched_samples)",len(matched_samples))
@@ -74,6 +77,7 @@ for omic_type in include_omics:
         omics_data_dict[omic_type] = exp_df.loc[matched_samples]
     else:
         omics_data_dict[omic_type] = pd.read_csv(omics_files[omic_type], sep=',', index_col=0).loc[matched_samples]
+        omics_data_dict[omic_type] = omics_data_dict[omic_type].sort_index(axis=0).sort_index(axis=1)
         if omic_type == "Exp":# apply Column-wise Standardization 
             scaler = StandardScaler() 
             omics_data_dict[omic_type] = pd.DataFrame(scaler.fit_transform(omics_data_dict[omic_type]),index=omics_data_dict[omic_type].index,columns=omics_data_dict[omic_type].columns)
@@ -90,7 +94,9 @@ for omic_type in include_omics:
 
 
 drug_df = pd.read_csv( drug_df_path, sep=',', index_col=0)
-print(drug_df.shape)
+print("drug_df",drug_df.shape)
+drug_df = drug_df.sort_index(axis=0).sort_index(axis=1)
+print("drug_df",drug_df.shape)
 print("AUC_df_numerical",AUC_df_numerical.shape)
 # matched AUCfile and omics_data samples
 AUC_df_numerical= (AUC_df_numerical.loc[matched_samples])
@@ -99,6 +105,7 @@ print("AUC_df_numerical match samples",AUC_df_numerical.shape)
 # print("median_value",median_value)    
 if criterion.loss_type == "BCE":
     AUC_df = pd.read_csv(AUC_df_path, sep=',', index_col=0).loc[matched_samples] # binary data
+    AUC_df = AUC_df.sort_index(axis=0).sort_index(axis=1)
     print("AUC_df",AUC_df.shape)
 else:
     AUC_df = AUC_df_numerical.copy()
@@ -110,7 +117,7 @@ if AUCtransform == "-log10":
     AUC_df = -np.log10(AUC_df)
 
 if test is True:
-    batch_size = 3
+    batch_size = 10
     num_epoch = 2
     print("batch_size",batch_size,"num_epoch:",num_epoch)
     drug_df=drug_df[:42]
@@ -447,6 +454,7 @@ with open(output_file, "w") as file:
     print("Output saved to:", output_file)
     os.chmod(output_file, 0o444)
 
+    
 if model_inference is True:
     set_seed(seed)
     if model_name == "Omics_DrugESPF_Model":
@@ -473,7 +481,9 @@ if model_inference is True:
         # label_df = pd.read_csv(f"../data/DAPL/share/PDTC_fromDAPL/{drug_name}/pdtclabel.csv", sep=',', index_col=0)
         label_df = pd.read_csv(f"../data/DAPL/share/TCGA_fromDAPL/{drug_name}/{tcgalabel_gene}.csv", sep=',', index_col=0)
         # label_df = 1 - label_df # make label 0 to 1, 1 to 0 to match predicted output. after that 0: sensitive, 1: resistant
+        TCGAexp = TCGAexp.sort_index(axis=0).sort_index(axis=1)
         print(f"TCGAexp {drug_name}data",TCGAexp_df.shape)
+        label_df = label_df.sort_index(axis=0).sort_index(axis=1)
         print(f"label_df {drug_name}data",label_df.shape)
         for omic_type in include_omics:
             if deconfound_EXPembedding is True:
@@ -488,7 +498,7 @@ if model_inference is True:
             print(f"{omic_type} tensor shape:", omics_data_tensor_dict[omic_type].shape)
             print(f"{omic_type} num_features",omics_numfeatures_dict[omic_type])
 
-        drug_df_path= "../data/DAPL/share/GDSC_drug_merge_pubchem_dropNA_MACCS.csv"
+#         drug_df_path= "../data/DAPL/share/GDSC_drug_merge_pubchem_dropNA_MACCS.csv"
         drug_df = pd.read_csv( drug_df_path, sep=',', index_col=0)
         # get specific drug and ccl
         drug_df= drug_df[drug_df['name'] == drug_name]
@@ -547,10 +557,12 @@ if model_inference is True:
                                                     criterion, onedrug_loader, device,ESPF,Drug_SelfAttention, 
                                                     weighted_threshold, few_weight, more_weight, 
                                                     outputcontrol='inference')
-
         # Calculate classification metrics                                            
         drugs_metrics[drug_name], _  = metrics_calculator(torch.cat(eval_targets), torch.cat(eval_outputs), best_prob_threshold, metric, dataset="test")
-
+        drugs_metrics[drug_name]["eval_targets"]=eval_targets
+        drugs_metrics[drug_name]["eval_outputs"]=eval_outputs
+        drugs_metrics[drug_name]["eval_outputs_before_final_activation_list"]=eval_outputs_before_final_activation_list
+        
 #         plt.rcParams["font.family"] = "serif"
 #         plt.rcParams['svg.fonttype'] = 'none'  # Use system fonts in SVG
 #         plt.rcParams['pdf.fonttype'] = 42  # Use Type 42 (TrueType) fonts
@@ -605,19 +617,20 @@ if model_inference is True:
     with open(output_file, "w") as file:
         if criterion.loss_type == "BCE":
             for drug, metrics in drugs_metrics.items():
-                file.write(f"{drug}\n")
+                file.write(f"\n{drug}\n")
                 file.write(f"best_prob_threshold: {best_prob_threshold} according to {metric}\n")
                 file.write(f"  test {criterion.loss_type}loss: {mean_batch_eval_loss_WO_penalty:.4f}\n")
                 for key in metrics_type_set:
                     file.write(f"  '{key}': {metrics[key].item():.4f}\n")
+                for key in ["eval_targets","eval_outputs_before_final_activation_list","eval_outputs"]:
+                    file.write(f"\n{key}\n{metrics[key][0][:20]}\n\n")
         else:
             for drug, metrics in drugs_metrics.items():
                 file.write(f"{drug}\n")
                 for key in ["AUROC", "AUPRC", criterion.loss_type]:
                     file.write(f"  '{key}': {metrics[key]:.4f}\n")
-        file.write(f"eval_targets\n{eval_targets[0][:20]}\n")
-        file.write(f"eval_outputs_before_final_activation_list\n{eval_outputs_before_final_activation_list[0][:20]}\n")
-        file.write(f"eval_outputs\n{eval_outputs[0][:20]}\n")       
+                for key in ["eval_targets","eval_outputs_before_final_activation_list","eval_outputs"]:
+                    file.write(f"\n{key}\n{metrics[key][0][:20]}\n")
     os.chmod(output_file, 0o444)
     del model
     torch.cuda.set_device("cuda:0")# Set the current device
