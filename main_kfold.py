@@ -32,7 +32,7 @@ from utils.train import train, evaluation
 from utils.correlation import correlation_func
 from utils.plot import loss_curve, correlation_density, Density_Plot_of_AUC_Values, Confusion_Matrix_plot, TCGA_predAUDRC_box_plot_twoClass
 from utils.tools import get_data_value_range,set_seed,get_vram_usage
-
+print("*"*50)
 
 # 設定命令列引數
 parser = argparse.ArgumentParser(description="import config to main")
@@ -254,9 +254,9 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
                            'val': BE_val_loss,  # best epoch
                            'test': None,  # Placeholder for test loss
                           }   
-    train_metrics, _ = metrics_calculator(torch.cat(BE_train_targets), torch.cat(BE_train_outputs), best_prob_threshold, metric, dataset="train")
     val_metrics, best_prob_threshold = metrics_calculator(torch.cat(BE_val_targets), torch.cat(BE_val_outputs), best_prob_threshold, metric ,dataset="val")
-
+    train_metrics, _ = metrics_calculator(torch.cat(BE_train_targets), torch.cat(BE_train_outputs), best_prob_threshold, metric, dataset="train")
+    
     kfold_metrics[fold] = {'train': train_metrics, 'val': val_metrics, 'test': None 
                            }   
     
@@ -293,6 +293,7 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
         BF_train_targets , BF_train_outputs  = BE_train_targets , BE_train_outputs
         BF_test_targets  , BF_test_outputs   = BE_test_targets  , BE_test_outputs
         BF_test_outputs_before_final_activation_list=test_outputs_before_final_activation_list
+        BF_best_prob_threshold = best_prob_threshold # for BCE metric
     del model 
     # Set the current device
     torch.cuda.set_device("cuda:0")
@@ -354,11 +355,11 @@ if criterion.loss_type != "BCE":
 
 if criterion.loss_type == "BCE":
     (train_cm , train_GT_0_count, train_GT_1_count, 
-    train_pred_binary_0_count, train_pred_binary_1_count) =metrics_calculator.confusion_matrix(torch.cat(BF_train_targets), torch.cat(BF_train_outputs), best_prob_threshold)
+    train_pred_binary_0_count, train_pred_binary_1_count) =metrics_calculator.confusion_matrix(torch.cat(BF_train_targets), torch.cat(BF_train_outputs), BF_best_prob_threshold)
     (val_cm ,  val_GT_0_count, val_GT_1_count, 
-    val_pred_binary_0_count, val_pred_binary_1_count ) =metrics_calculator.confusion_matrix(torch.cat(BF_val_targets), torch.cat(BF_val_outputs), best_prob_threshold)
+    val_pred_binary_0_count, val_pred_binary_1_count ) =metrics_calculator.confusion_matrix(torch.cat(BF_val_targets), torch.cat(BF_val_outputs), BF_best_prob_threshold)
     (test_cm ,  test_GT_0_count, test_GT_1_count, 
-    test_pred_binary_0_count, test_pred_binary_1_count ) =metrics_calculator.confusion_matrix(torch.cat(BF_test_targets), torch.cat(BF_test_outputs), best_prob_threshold)
+    test_pred_binary_0_count, test_pred_binary_1_count ) =metrics_calculator.confusion_matrix(torch.cat(BF_test_targets), torch.cat(BF_test_outputs), BF_best_prob_threshold)
 
     # plot confusion matrix
     cm_datas = [(train_cm, 'Train', 'Reds'),  (val_cm, 'Validation', 'Greens'),   (test_cm, 'Test', 'Blues')]
@@ -556,14 +557,14 @@ if model_inference is True:
                                                     weighted_threshold, few_weight, more_weight, 
                                                     outputcontrol='inference')
         # Calculate classification metrics                                            
-        drugs_metrics[drug_name], _  = metrics_calculator(torch.cat(eval_targets), torch.cat(eval_outputs), best_prob_threshold, metric, dataset="test")
+        drugs_metrics[drug_name], _  = metrics_calculator(torch.cat(eval_targets), torch.cat(eval_outputs), BF_best_prob_threshold, metric, dataset="test")
         drugs_metrics[drug_name]["eval_targets"]=eval_targets
         drugs_metrics[drug_name]["eval_outputs"]=eval_outputs
         drugs_metrics[drug_name]["eval_outputs_before_final_activation_list"]=eval_outputs_before_final_activation_list
 
         if criterion.loss_type == "BCE":
             (test_cm ,  test_GT_0_count, test_GT_1_count, 
-            test_pred_binary_0_count, test_pred_binary_1_count ) =metrics_calculator.confusion_matrix(torch.cat(eval_targets), torch.cat(eval_outputs), best_prob_threshold)
+            test_pred_binary_0_count, test_pred_binary_1_count ) =metrics_calculator.confusion_matrix(torch.cat(eval_targets), torch.cat(eval_outputs), BF_best_prob_threshold)
 
             drugs_metrics[drug_name]["CM"] = test_cm
             # # plot confusion matrix
@@ -589,7 +590,7 @@ if model_inference is True:
         if criterion.loss_type == "BCE":
             for drug_name, metrics in drugs_metrics.items():
                 file.write(f"\n{drug_name}\n")
-                file.write(f"best_prob_threshold: {best_prob_threshold} according to {metric}\n")
+                file.write(f"BF_best_prob_threshold: {BF_best_prob_threshold} according to {metric}\n")
                 file.write(f"  test {criterion.loss_type}loss: {mean_batch_eval_loss_WO_penalty:.4f}\n")
                 for key in metrics_type_set:
                     file.write(f"  '{key}': {metrics[key].item():.4f}\n")
