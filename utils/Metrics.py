@@ -9,10 +9,10 @@ class MetricsCalculator_nntorch(nn.Module):
         self.types = types
         self.mse_loss = nn.MSELoss(reduction="mean")
         self.mae_loss = nn.L1Loss(reduction="mean") # reduction (default 'mean')
-    def _find_best_threshold(self, y_true, y_pred, metric="F1", thresholds=torch.linspace(0.0, 1.0, steps=100)):
+    def _find_best_threshold(self, y_true, y_pred, metric="0.5", thresholds=torch.linspace(0.0, 1.0, steps=500)):
         """
-        Find the best threshold that maximizes the given metric (default: F1).
-        Supported metrics: "F1", "Accuracy", "Precision", "Recall"
+        Find the best threshold that maximizes the given metric (default: 0.5).
+        Supported metrics: "F1", "Accuracy", "Precision", "Sensitivity"
         """
         y_true = y_true.detach()
         y_pred = y_pred.detach()
@@ -21,9 +21,8 @@ class MetricsCalculator_nntorch(nn.Module):
         metric_class = { "F1": torchmetrics.classification.F1Score(task="binary"),
                          "Accuracy": torchmetrics.classification.Accuracy(task="binary"),
                          "Precision": torchmetrics.classification.Precision(task="binary"),
-                         "Recall": torchmetrics.classification.Recall(task="binary"),
-                         "Specificity": torchmetrics.classification.Specificity(task="binary")
-        }
+                         "Sensitivity": torchmetrics.classification.Recall(task="binary"),
+                         "Specificity": torchmetrics.classification.Specificity(task="binary")}
         if metric not in metric_class:
             return best_thresh
         else:
@@ -50,12 +49,13 @@ class MetricsCalculator_nntorch(nn.Module):
             ss_residual = torch.sum((y_true - y_pred) ** 2)
             self.results["R^2"] = 1 - (ss_residual / ss_total)
         if "Accuracy" in self.types:
-            if dataset == "train":
-                best_prob_threshold = self._find_best_threshold(y_true, y_pred, metric=metric, thresholds=torch.linspace(0.0, 1.0, steps=100))
+            if dataset == "val":
+                best_prob_threshold = self._find_best_threshold(y_true, y_pred, metric=metric, thresholds=torch.linspace(0.0, 1.0, steps=500))
+            print(f"Best threshold for {metric} on {dataset} set: {best_prob_threshold}")
             device=y_true.device
             best_prob_threshold = torch.tensor(best_prob_threshold, dtype=torch.float32, device=device)
             # Binarize labels and predictions based on best_prob_threshold
-            GT = (y_true > best_prob_threshold).int() # in order to match the type of y_pred # GT already binarized
+            GT = (y_true > 0.5).int() # in order to match the type of y_pred # GT already binarized
             pred_bi = (y_pred > best_prob_threshold).int()
             # Compute metrics using torchmetrics
             accuracy = torchmetrics.classification.Accuracy(task="binary").to(device)(pred_bi, GT)

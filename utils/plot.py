@@ -9,6 +9,44 @@ import torch
 
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
+
+def p_to_star(p):
+    if p < 0.0001:
+        return '***'
+    elif p < 0.01:
+        return '**'
+    elif p < 0.05:
+        return '*'
+    else:
+        return 'n.s.'
+
+def TCGA_predAUDRC_box_plot_twoClass(drug_name,cohort,df,sensitive,resistant,p_val,hyperparameter_folder_path):
+    plt.rcParams["font.family"] = "serif"
+    plt.rcParams['svg.fonttype'] = 'none'  # Use system fonts in SVG
+    plt.rcParams['pdf.fonttype'] = 42  # Use Type 42 (TrueType) fonts
+    fig, ax = plt.subplots(figsize=(6, 6))
+    sns.boxplot(x='Label', y='predicted AUDRC', data=df, ax=ax, palette = {'0.0': 'red', '1.0': 'blue'})
+    ax.set_title(f"{drug_name} in {cohort}", fontsize=14, fontweight="bold")
+    # p_text = f"p = {p_val:.4f}"
+    p_text = p_to_star(p_val)
+    x1, x2 = 0, 1
+    y, h = max(df['predicted AUDRC']) + 0.002, 0.002
+    ax.plot([x1, x1, x2, x2], [y, y+h, y+h, y], lw=1.5, c='k')
+    ax.text((x1+x2) / 2, y+h, p_text, ha='center', va='bottom', fontsize=14)#, color='red'
+    # Axis labels # label是0的一定在前面，所以sen=0那就要放前面
+    ax.set_xticklabels([    f'resistant (n={len(resistant)})', # \nlabel=0
+                            f'sensitive (n={len(sensitive)})'], fontsize=14, fontweight="bold") #\nlabel=1
+    # ax.set_xlabel("Label", fontsize=14, fontweight="bold")
+    ax.set_ylabel("Predicted AUDRC", fontsize=14, fontweight="bold" )
+    plt.tight_layout()
+    output_file = os.path.join(hyperparameter_folder_path, f'TCGA_{drug_name}_predAUDRC_box_plot_twoClass.png')
+    try:
+        fig.savefig(output_file)
+        os.chmod(output_file, 0o444)
+    except Exception as e:
+        print(f"Error occurred while saving or setting permissions for {output_file}: {str(e)}")
+    return plt
+    
 def heatmap(attention_scores_Matrix, drug_ID, cell_ID, include_omics ,fontsize_ticks=8, module="", sub_list=None ):
     #sub: sequence of substructure ESPF text, list type
     # Define the colors and their corresponding positions (anchors)

@@ -30,7 +30,7 @@ from utils.split_data_id import split_id,repeat_func
 from utils.create_dataloader import OmicsDrugDataset
 from utils.train import train, evaluation
 from utils.correlation import correlation_func
-from utils.plot import loss_curve, correlation_density, Density_Plot_of_AUC_Values, Confusion_Matrix_plot
+from utils.plot import loss_curve, correlation_density, Density_Plot_of_AUC_Values, Confusion_Matrix_plot, TCGA_predAUDRC_box_plot_twoClass
 from utils.tools import get_data_value_range,set_seed,get_vram_usage
 
 
@@ -254,8 +254,8 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
                            'val': BE_val_loss,  # best epoch
                            'test': None,  # Placeholder for test loss
                           }   
-    train_metrics, best_prob_threshold = metrics_calculator(torch.cat(BE_train_targets), torch.cat(BE_train_outputs), best_prob_threshold, metric, dataset="train")
-    val_metrics, _ = metrics_calculator(torch.cat(BE_val_targets), torch.cat(BE_val_outputs), best_prob_threshold, metric ,dataset="val")
+    train_metrics, _ = metrics_calculator(torch.cat(BE_train_targets), torch.cat(BE_train_outputs), best_prob_threshold, metric, dataset="train")
+    val_metrics, best_prob_threshold = metrics_calculator(torch.cat(BE_val_targets), torch.cat(BE_val_outputs), best_prob_threshold, metric ,dataset="val")
 
     kfold_metrics[fold] = {'train': train_metrics, 'val': val_metrics, 'test': None 
                            }   
@@ -472,26 +472,24 @@ if model_inference is True:
     drugs_metrics={}
     for drug_name in drug_list:
         if deconfound_EXPembedding is True:
-            with open(f"../data/DAPL/share/pretrain/{DA_Folder}/TCGA/{drug_name}_latent_results.pkl", 'rb') as f:
+            with open(f"../data/DAPL/share/pretrain/{DA_Folder}/{cohort}/{drug_name}_latent_results.pkl", 'rb') as f:
                 latent_dict = pickle.load(f)
-                TCGAexp_df = pd.DataFrame(latent_dict).T # 32
+                CohortExp_df = pd.DataFrame(latent_dict).T # 32
         else:
-            # TCGAexp_df = pd.read_csv(f"../data/DAPL/share/PDTC_fromDAPL/{drug_name}/pdtcdata.csv", sep=',', index_col=0)
-            TCGAexp_df = pd.read_csv(f"../data/DAPL/share/TCGA_fromDAPL/{drug_name}/{tcgadata_gene}.csv", sep=',', index_col=0) #1426
-        # label_df = pd.read_csv(f"../data/DAPL/share/PDTC_fromDAPL/{drug_name}/pdtclabel.csv", sep=',', index_col=0)
-        label_df = pd.read_csv(f"../data/DAPL/share/TCGA_fromDAPL/{drug_name}/{tcgalabel_gene}.csv", sep=',', index_col=0)
-        # label_df = 1 - label_df # make label 0 to 1, 1 to 0 to match predicted output. after that 0: sensitive, 1: resistant
-        TCGAexp = TCGAexp.sort_index(axis=0).sort_index(axis=1)
-        print(f"TCGAexp {drug_name}data",TCGAexp_df.shape)
+            CohortExp_df = pd.read_csv(f"../data/DAPL/share/{cohort}_fromDAPL/{drug_name}/{cohort.lower()}data{geneNUM}.csv", sep=',', index_col=0) #1426
+        label_df = pd.read_csv(f"../data/DAPL/share/{cohort}_fromDAPL/{drug_name}/{cohort.lower()}label{geneNUM}.csv", sep=',', index_col=0)
+        # label_df = 1 - label_df # make label 0 to 1, 1 to 0 to match regressionpredicted output. after that 0: sensitive, 1: resistant
+        CohortExp_df = CohortExp_df.sort_index(axis=0).sort_index(axis=1)
+        print(f"{cohort}exp {drug_name}data",CohortExp_df.shape)
         label_df = label_df.sort_index(axis=0).sort_index(axis=1)
         print(f"label_df {drug_name}data",label_df.shape)
         for omic_type in include_omics:
             if deconfound_EXPembedding is True:
-                omics_data_dict["Exp"] = TCGAexp_df
+                omics_data_dict["Exp"] = CohortExp_df
             else:
                 if omic_type == "Exp":
                     scaler = scaler_dict[omic_type]
-                    omics_data_dict[omic_type] = pd.DataFrame(scaler.transform(TCGAexp_df),index=TCGAexp_df.index,columns=TCGAexp_df.columns) # use fitted CCLE scaler to transform TCGA data
+                    omics_data_dict[omic_type] = pd.DataFrame(scaler.transform(CohortExp_df),index=CohortExp_df.index,columns=CohortExp_df.columns) # use fitted CCLE scaler to transform TCGA data
             omics_data_tensor_dict[omic_type]  = torch.tensor(omics_data_dict[omic_type].values, dtype=torch.float32).to(device)
             omics_numfeatures_dict[omic_type] = omics_data_tensor_dict[omic_type].shape[1]
 
@@ -562,35 +560,6 @@ if model_inference is True:
         drugs_metrics[drug_name]["eval_targets"]=eval_targets
         drugs_metrics[drug_name]["eval_outputs"]=eval_outputs
         drugs_metrics[drug_name]["eval_outputs_before_final_activation_list"]=eval_outputs_before_final_activation_list
-        
-#         plt.rcParams["font.family"] = "serif"
-#         plt.rcParams['svg.fonttype'] = 'none'  # Use system fonts in SVG
-#         plt.rcParams['pdf.fonttype'] = 42  # Use Type 42 (TrueType) fonts
-#         df = pd.DataFrame({'predicted AUDRC': torch.cat(eval_outputs).cpu().numpy(),
-#                             'Label': torch.cat(eval_targets).cpu().numpy()})
-#         # Perform t-test between the two groups
-#         sensitive = df[df['Label'] == 0]['predicted AUDRC']
-#         resistant = df[df['Label'] == 1]['predicted AUDRC']
-#         t_stat, p_val = ttest_ind(sensitive, resistant)
-#         # plot
-#         fig, ax = plt.subplots(figsize=(5, 6))
-#         sns.boxplot(x='Label', y='predicted AUDRC', data=df, ax=ax)
-#         # Title and p-value annotation
-#         ax.set_title(f"predicted AUDRC by Label ({drug_name})", fontsize=14)
-#         p_text = f"p = {p_val:.4f}"
-#         x1, x2 = 0, 1
-#         y, h = max(df['predicted AUDRC']) + 0.002, 0.002
-#         ax.plot([x1, x1, x2, x2], [y, y+h, y+h, y], lw=1.5, c='k')
-#         ax.text((x1+x2) / 2, y+h, p_text, ha='center', va='bottom', fontsize=14, color='red')
-#         # Axis labels
-#         ax.set_xticks([0, 1])  # 指定 x 軸兩個類別的位置
-#         ax.set_xticklabels([f'sensitive (n={len(sensitive)})\nlabel=0',
-#                             f'resistant (n={len(resistant)})\nlabel=1'], fontsize=14)
-#         ax.set_xlabel("Label", fontsize=14)
-#         ax.set_ylabel("predicted AUDRC", fontsize=14)
-#         plt.tight_layout()
-#         plt.show()
-#         fig.savefig(f'{hyperparameter_folder_path}/boxplot_predictedAUDRC_{drug_name}_TCGAlabel')
 
         if criterion.loss_type == "BCE":
             (test_cm ,  test_GT_0_count, test_GT_1_count, 
@@ -598,26 +567,28 @@ if model_inference is True:
 
             drugs_metrics[drug_name]["CM"] = test_cm
             # # plot confusion matrix
-            cm_datas = [(test_cm, 'TCGA', 'Blues')]
+            cm_datas = [(test_cm, cohort, 'Blues')]
             Confusion_Matrix_plot(cm_datas,hyperparameter_folder_path=hyperparameter_folder_path,drug=drug_name)
 
         else:#regression use prob_threshold to get binary outcome
+            df = pd.DataFrame({'predicted AUDRC': torch.cat(eval_outputs).cpu().numpy(),
+                    'Label': torch.cat(eval_targets).cpu().numpy()})
+            # Perform t-test between the two groups
+            sensitive = df[df['Label'] == 1]['predicted AUDRC']
+            resistant = df[df['Label'] == 0]['predicted AUDRC']
+            t_stat, p_val = ttest_ind(sensitive, resistant)
+            drugs_metrics[drug_name]["pvalue"]= p_val
+            if p_val<=0.05:
+                TCGA_predAUDRC_box_plot_twoClass(drug_name,cohort,df,sensitive,resistant,p_val,hyperparameter_folder_path)
         # not a reasonable way to calculate AUROC and AUPRC to explain the model performance
-            # device=torch.cat(eval_targets).device
-            # prob_threshold = torch.tensor(prob_threshold, dtype=torch.float32, device=device)
-            # GT = (torch.cat(eval_targets) > prob_threshold).int()
-            # auroc = torchmetrics.classification.AUROC(task="binary").to(device)(torch.cat(eval_outputs),GT)  # Use raw scores
-            # auprc = torchmetrics.classification.AveragePrecision(task="binary").to(device)(torch.cat(eval_outputs),GT) # Use raw scores
-            # drugs_metrics[drug_name]["AUROC"] = auroc.item()
-            # drugs_metrics[drug_name]["AUPRC"] = auprc.item()
             drugs_metrics[drug_name][criterion.loss_type] = mean_batch_eval_loss_WO_penalty
             
     
-    output_file = f"{hyperparameter_folder_path}/BF{BF}_TCGA_inference_result.txt"
+    output_file = f"{hyperparameter_folder_path}/BF{BF}_{cohort}_inference_result.txt"
     with open(output_file, "w") as file:
         if criterion.loss_type == "BCE":
-            for drug, metrics in drugs_metrics.items():
-                file.write(f"\n{drug}\n")
+            for drug_name, metrics in drugs_metrics.items():
+                file.write(f"\n{drug_name}\n")
                 file.write(f"best_prob_threshold: {best_prob_threshold} according to {metric}\n")
                 file.write(f"  test {criterion.loss_type}loss: {mean_batch_eval_loss_WO_penalty:.4f}\n")
                 for key in metrics_type_set:
@@ -625,12 +596,17 @@ if model_inference is True:
                 for key in ["eval_targets","eval_outputs_before_final_activation_list","eval_outputs"]:
                     file.write(f"\n{key}\n{metrics[key][0][:20]}\n\n")
         else:
-            for drug, metrics in drugs_metrics.items():
-                file.write(f"{drug}\n")
-                for key in ["AUROC", "AUPRC", criterion.loss_type]:
-                    file.write(f"  '{key}': {metrics[key]:.4f}\n")
+            for drug_name, metrics in drugs_metrics.items():
+                file.write(f"{drug_name}\n")
                 for key in ["eval_targets","eval_outputs_before_final_activation_list","eval_outputs"]:
                     file.write(f"\n{key}\n{metrics[key][0][:20]}\n")
+                if metrics['pvalue'].item() <= 0.05:
+                    file.write(f"\n pvalue <= 0.05 ")
+                else:
+                    file.write(f"\n pvalue > 0.05 ")
+                file.write(f"{drug_name} pvalue: {metrics['pvalue'].item():.4f}\n\n")
+                        
+                    
     os.chmod(output_file, 0o444)
     del model
     torch.cuda.set_device("cuda:0")# Set the current device
