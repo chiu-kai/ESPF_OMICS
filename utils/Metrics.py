@@ -35,6 +35,54 @@ class MetricsCalculator_nntorch(nn.Module):
                     best_score = score
                     best_thresh = thresh.item()
             return best_thresh
+        
+    def _find_best_threshold_Curve(self, y_true, y_pred, metric="0.5", thresholds=None):
+        """
+        use torchmetrics.classification.ROC to generate many thresholds and corresponsing fpr, tpr
+        or use torchmetrics.classification.PrecisionRecallCurve to generate many thresholds and corresponsing precision, recall
+        Find the best threshold that maximizes the given metric (default: 0.5).
+        Supported metrics: "F1", "F1_RecSpe"
+        """
+        y_true = y_true.detach()
+        y_pred = y_pred.detach()
+        device=y_true.device
+        y_true = (y_true > 0.5).int()
+        y_pred = y_pred.to(device)
+        best_thresh = 0.5
+        best_score = -1.0
+        if metric == "0.5":
+            return best_thresh
+        elif metric == "F1":
+            Precision, Sensitivity ,thresholds = torchmetrics.classification.PrecisionRecallCurve(task="binary").to(device)(y_pred, y_true) # to generate many thresholds and corresponsing precision, recall
+            F1 = 2 * (Sensitivity * Precision) / (Sensitivity + Precision + 1e-8)
+            best_idx = torch.argmax(F1)
+            return thresholds[best_idx]
+        elif metric == "F1_RecSpe":
+            fpr, Sensitivity ,thresholds  = torchmetrics.classification.ROC(task="binary").to(device)(y_pred, y_true) # to generate many thresholds and corresponsing fpr, tpr
+            Specificity = 1 - fpr
+            F1_RecSpe = 2 * (Sensitivity * (Specificity)) / (Sensitivity + (Specificity) + 1e-8)
+            best_idx = torch.argmax(F1_RecSpe)
+            return thresholds[best_idx]
+        elif metric == "F1_RecSpePre":
+            if thresholds is None:
+                thresholds = torch.unique(y_pred)
+            for threshold in thresholds:
+                pred_bi = (y_pred >= threshold).int()
+                cm = torchmetrics.functional.confusion_matrix(pred_bi, y_true, task="binary", num_classes=2)
+                TN = cm[0, 0].item()
+                FP = cm[0, 1].item()
+                FN = cm[1, 0].item()
+                TP = cm[1, 1].item()
+                recall = TP / (TP + FN + 1e-8)
+                specificity = TN / (TN + FP + 1e-8)
+                precision = TP / (TP + FP + 1e-8)
+
+                F1_RecSpePre = 3 * (recall * specificity * precision) / (recall + specificity + precision + 1e-8)
+                if F1_RecSpePre > best_score:
+                    best_score = F1_RecSpePre
+                    best_thresh = threshold.item()
+            return best_thresh
+            
     def forward(self, y_true, y_pred, best_prob_threshold, metric, dataset=""): 
         self.results = {}
         if "MSE" in self.types:
@@ -50,8 +98,8 @@ class MetricsCalculator_nntorch(nn.Module):
             self.results["R^2"] = 1 - (ss_residual / ss_total)
         if "Accuracy" in self.types:
             if dataset == "val":
-                best_prob_threshold = self._find_best_threshold(y_true, y_pred, metric=metric, thresholds=torch.linspace(0.0, 1.0, steps=500))
-            print(f"Best threshold for {metric} on {dataset} set: {best_prob_threshold}")
+                best_prob_threshold = self._find_best_threshold_Curve(y_true, y_pred, metric=metric, thresholds=None) # torch.linspace(0.0, 1.0, steps=500)
+                print(f"Best threshold for {metric} on {dataset} set: {best_prob_threshold}")
             device=y_true.device
             best_prob_threshold = torch.tensor(best_prob_threshold, dtype=torch.float32, device=device)
             # Binarize labels and predictions based on best_prob_threshold
@@ -65,13 +113,18 @@ class MetricsCalculator_nntorch(nn.Module):
             sensitivity = torchmetrics.classification.Recall(task="binary").to(device)(pred_bi, GT)
             specificity = torchmetrics.classification.Specificity(task="binary").to(device)(pred_bi, GT)
             precision = torchmetrics.classification.Precision(task="binary").to(device)(pred_bi, GT)
+            F1_RecSpe = 2 * (sensitivity * specificity) / (sensitivity + specificity + 1e-8)
+            F1_RecSpePre = 3 * (sensitivity * specificity * precision) / (sensitivity + specificity + precision + 1e-8)
             self.results = {"Accuracy": accuracy,
                             "AUROC": auroc,
                             "AUPRC": auprc,
                             "Sensitivity": sensitivity,
                             "Specificity": specificity,
                             "Precision": precision,
-                            "F1": f1}
+                            "F1": f1,
+                            "F1_RecSpe": F1_RecSpe,
+                            "F1_RecSpePre": F1_RecSpePre,
+                            "Best_Threshold": best_prob_threshold}
         return self.results, best_prob_threshold
         
     def confusion_matrix(self, y_true, y_pred, best_prob_threshold):

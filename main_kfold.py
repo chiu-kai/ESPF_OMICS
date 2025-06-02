@@ -32,7 +32,7 @@ from utils.train import train, evaluation
 from utils.correlation import correlation_func
 from utils.plot import loss_curve, correlation_density, Density_Plot_of_AUC_Values, Confusion_Matrix_plot, TCGA_predAUDRC_box_plot_twoClass
 from utils.tools import get_data_value_range,set_seed,get_vram_usage
-print("*"*50)
+print("*"*100)
 
 # 設定命令列引數
 parser = argparse.ArgumentParser(description="import config to main")
