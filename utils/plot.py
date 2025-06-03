@@ -235,7 +235,7 @@ def Density_Plot_of_AUC_Values(datasets,hyperparameter_folder_path=None):
 def Confusion_Matrix_plot(datasets,hyperparameter_folder_path=None,drug=None):
     plt.rcParams["font.family"] = "serif"
     if len(datasets)==1:
-        fig, ax = plt.subplots(figsize=(7, 6))
+        fig, ax = plt.subplots(figsize=(8,7))
         cm, title, color = datasets[0]
         sns.heatmap(cm, annot=True, fmt='d', annot_kws={"size": 16, "weight": "bold"}, 
                     cmap=color, cbar=False, vmin=0, vmax=max(cm.max() * 1.3, 1), linewidths=0,
@@ -254,7 +254,7 @@ def Confusion_Matrix_plot(datasets,hyperparameter_folder_path=None,drug=None):
         for label in ax.get_xticklabels() + ax.get_yticklabels():
             label.set_fontweight('bold')
         if hyperparameter_folder_path is not None:
-            output_file = os.path.join(hyperparameter_folder_path, f'{drug}Confusion_Matrix.png')
+            output_file = os.path.join(hyperparameter_folder_path, f'{drug} Confusion_Matrix.png')
             try:
                 fig.savefig(output_file)
                 os.chmod(output_file, 0o444)

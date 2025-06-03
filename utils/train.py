@@ -7,6 +7,23 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import time 
+from torch.optim.lr_scheduler import CosineAnnealingLR
+import argparse
+import importlib.util
+# import config.py dynamically
+# 設定命令列引數
+parser = argparse.ArgumentParser(description="import config to main")
+parser.add_argument("--config", required=True, help="Path to the config.py file")
+args = parser.parse_args()
+# 動態載入 config.py
+spec = importlib.util.spec_from_file_location("config", args.config)
+config = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(config)
+# 將 config 模組中的變數導入當前命名空間
+for key, value in vars(config).items():
+    if not key.startswith("_"):  # 過濾內部變數，例如 __builtins__
+        globals()[key] = value
+
 
 
 class GradientNormTracker:
@@ -63,11 +80,11 @@ class GradientNormTracker:
 #    loss.backward()
 #    gradient_norms_list = tracker.check_and_log(model)  # Check and log gradient norms
 # gradient_fig = tracker.plot_gradient_norms()
-def warmup_lr_scheduler(optimizer, warmup_iters, Decrease_percent,continuous=True):
+def warmup_lr_scheduler(optimizer, decrese_epoch, Decrease_percent,continuous=True):
     def f(epoch):
-        if epoch >= warmup_iters:
+        if epoch >= decrese_epoch:
             if continuous is True:
-                return Decrease_percent ** (epoch-warmup_iters+1)
+                return Decrease_percent ** (epoch-decrese_epoch+1)
             elif continuous is not True:
                 return Decrease_percent
         return 1
@@ -145,15 +162,16 @@ def evaluation(model, eval_epoch_loss_W_penalty_ls, eval_epoch_loss_WO_penalty_l
 
 
 
-def train(model, optimizer, batch_size, num_epoch,patience, 
-          warmup_iters, Decrease_percent, continuous, 
+def train(model, optimizer, 
           criterion, train_loader, val_loader, device,
           ESPF,Drug_SelfAttention,seed,
           weighted_threshold, few_weight, more_weight, TrackGradient=False):
     
     # Training with early stopping (assuming you've defined the EarlyStopping logic)
-    if warmup_iters is not None:
-        lr_scheduler = warmup_lr_scheduler(optimizer, warmup_iters, Decrease_percent,continuous)
+    if warmup_lr is not None:
+        lr_scheduler = warmup_lr_scheduler(optimizer, decrese_epoch, Decrease_percent,continuous)
+    if CosineAnnealing_LR is not None:
+        lr_scheduler = CosineAnnealingLR(optimizer, T_max=T_max, eta_min=eta_min)
     if TrackGradient is True:
         Grad_tracker = GradientNormTracker(batch_size,check_frequency=10, enable_plot=True)  # Enable or disable plotting
 
@@ -196,7 +214,7 @@ def train(model, optimizer, batch_size, num_epoch,patience,
                     gradient_norms_list = None
                 #torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0) # Apply gradient clipping
                 optimizer.step()  # Update weights
-  
+                
 
         (val_targets, val_outputs,
          val_epoch_loss_W_penalty_ls,  val_epoch_loss_WO_penalty_ls, 
@@ -214,7 +232,7 @@ def train(model, optimizer, batch_size, num_epoch,patience,
                                                         outputcontrol='plotLossCurve') 
         
         
-        if warmup_iters is not None:
+        if decrese_epoch is not None:
             # print("lr of epoch", epoch + 1, "=>", lr_scheduler.get_lr()) 
             lr_scheduler.step()
 

@@ -117,15 +117,10 @@ if AUCtransform == "-log10":
     AUC_df = -np.log10(AUC_df)
 
 if test is True:
-    batch_size = 10
-    num_epoch = 2
-    print("batch_size",batch_size,"num_epoch:",num_epoch)
     drug_df=drug_df[:42]
     AUC_df=AUC_df.iloc[:76,:42]
     print("drug_df",drug_df.shape)
     print("AUC_df",AUC_df.shape)
-    kfoldCV = 2
-    print("kfoldCV",kfoldCV)
 
 if 'weighted' in criterion.loss_type :    
     # Set threshold based on the 90th percentile # 將高於threshold的AUC權重增加
@@ -239,15 +234,14 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
      BEpo_trainLoss_W_penalty_ls, BEpo_trainLoss_WO_penalty_ls, 
      BEpo_valLoss_W_penalty_ls, BEpo_valLoss_WO_penalty_ls, 
      BE_val_targets, BE_val_outputs, BE_train_targets , BE_train_outputs,
-     gradient_fig, gradient_norms_list) = train( model, optimizer, batch_size, num_epoch, patience, 
-                                               warmup_iters, Decrease_percent, continuous, 
+     gradient_fig, gradient_norms_list) = train( model, optimizer,  
                                                criterion, train_loader, val_loader, device,
                                                ESPF, Drug_SelfAttention, seed ,
                                                weighted_threshold, few_weight, more_weight, TrackGradient)
     # BE_val_loss = mean_batch_eval_loss_WO_penalty
     print("best Epoch : ",best_epoch,"BE_val_loss : ",BE_val_loss,
           "BE_val_train_loss_WO_penalty : ",BE_val_train_loss_WO_penalty," batch_size : ",batch_size,
-          "learning_rate : ",learning_rate," warmup_iters :" ,warmup_iters  ,
+          "learning_rate : ",learning_rate," decrese_epoch :" ,decrese_epoch  ,
           " with Decrease_percent : ",Decrease_percent )
 
     kfold_losses[fold] = { 'train': BE_val_train_loss_WO_penalty,  # Train loss in best Validation epoch
@@ -373,7 +367,7 @@ with open(output_file, "w") as file:
         get_data_value_range(torch.cat(BF_train_targets + BF_val_targets + BF_test_targets).tolist(),"GroundTruth_AUC", file=file)
         get_data_value_range(torch.cat(BF_train_outputs + BF_val_outputs + BF_test_outputs).tolist(),"predicted_AUC", file=file)
 
-    file.write(f'\nhyperparameter_print\n{hyperparameter_print}')
+    file.write(f'\nhyperparameter_print\n{hyperparameter_print}')  
     
     file.write(f'kfold_losses:\n {kfold_losses}\n')# all fold loss on each set
 
@@ -410,7 +404,8 @@ with open(output_file, "w") as file:
                    f"Best Fold {BF} Val GT_count_0_1: {val_GT_0_count}_{val_GT_1_count}\n"
                    f"Best Fold {BF} Val pred_binary_count_0_1: {val_pred_binary_0_count}_{val_pred_binary_1_count}\n"
                    f"Best Fold {BF} Test GT_count_0_1: {test_GT_0_count}_{test_GT_1_count}\n"
-                   f"Best Fold {BF} Test pred_binary_count_0_1: {test_pred_binary_0_count}_{test_pred_binary_1_count}\n")       
+                   f"Best Fold {BF} Test pred_binary_count_0_1: {test_pred_binary_0_count}_{test_pred_binary_1_count}\n")   
+        file.write(f"\nBF_best_prob_threshold: {BF_best_prob_threshold}\n") 
     else:
     # Pearson and Spearman statistics
         # <=0的都=0
@@ -561,6 +556,7 @@ if model_inference is True:
         drugs_metrics[drug_name]["eval_targets"]=eval_targets
         drugs_metrics[drug_name]["eval_outputs"]=eval_outputs
         drugs_metrics[drug_name]["eval_outputs_before_final_activation_list"]=eval_outputs_before_final_activation_list
+        drugs_metrics[drug_name][criterion.loss_type] = mean_batch_eval_loss_WO_penalty
 
         if criterion.loss_type == "BCE":
             (test_cm ,  test_GT_0_count, test_GT_1_count, 
@@ -582,7 +578,7 @@ if model_inference is True:
             if p_val<=0.05:
                 TCGA_predAUDRC_box_plot_twoClass(drug_name,cohort,df,sensitive,resistant,p_val,hyperparameter_folder_path)
         # not a reasonable way to calculate AUROC and AUPRC to explain the model performance
-            drugs_metrics[drug_name][criterion.loss_type] = mean_batch_eval_loss_WO_penalty
+           
             
     
     output_file = f"{hyperparameter_folder_path}/BF{BF}_{cohort}_inference_result.txt"
@@ -591,7 +587,7 @@ if model_inference is True:
             for drug_name, metrics in drugs_metrics.items():
                 file.write(f"\n{drug_name}\n")
                 file.write(f"BF_best_prob_threshold: {BF_best_prob_threshold} according to {metric}\n")
-                file.write(f"  test {criterion.loss_type}loss: {mean_batch_eval_loss_WO_penalty:.4f}\n")
+                file.write(f"  test {criterion.loss_type}loss: {metrics[criterion.loss_type].item():.6f}\n")
                 for key in metrics_type_set:
                     file.write(f"  '{key}': {metrics[key].item():.4f}\n")
                 for key in ["eval_targets","eval_outputs_before_final_activation_list","eval_outputs"]:
@@ -599,13 +595,14 @@ if model_inference is True:
         else:
             for drug_name, metrics in drugs_metrics.items():
                 file.write(f"{drug_name}\n")
-                for key in ["eval_targets","eval_outputs_before_final_activation_list","eval_outputs"]:
-                    file.write(f"\n{key}\n{metrics[key][0][:20]}\n")
+                file.write(f"  test {criterion.loss_type}loss: {metrics[criterion.loss_type].item():.6f}\n")
                 if metrics['pvalue'].item() <= 0.05:
                     file.write(f"\n pvalue <= 0.05 ")
                 else:
                     file.write(f"\n pvalue > 0.05 ")
                 file.write(f"{drug_name} pvalue: {metrics['pvalue'].item():.4f}\n\n")
+                for key in ["eval_targets","eval_outputs_before_final_activation_list","eval_outputs"]:
+                    file.write(f"\n{key}\n{metrics[key][0][:20]}\n")
                         
                     
     os.chmod(output_file, 0o444)
