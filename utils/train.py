@@ -24,8 +24,6 @@ for key, value in vars(config).items():
     if not key.startswith("_"):  # 過濾內部變數，例如 __builtins__
         globals()[key] = value
 
-
-
 class GradientNormTracker:
     def __init__(self, batch_size,check_frequency=10, enable_plot=True):
         """
@@ -131,9 +129,12 @@ def evaluation(model, eval_epoch_loss_W_penalty_ls, eval_epoch_loss_WO_penalty_l
             if outputcontrol != 'plotLossCurve':
                 eval_outputs_before_final_activation_list.append((model_output[3])[mask].detach().cpu().numpy().reshape(-1))
 
-        if weighted_threshold is not None:
-            weight_loss_mask = torch.where(torch.cat(eval_targets) > weighted_threshold, few_weight, more_weight)# Returns few_weight where condition is True.
-        
+            if 'weighted' in criterion.loss_type :    
+                if 'BCE' in criterion.loss_type :
+                    weight_loss_mask = torch.where(torch.cat(eval_targets) == 1, few_weight, more_weight) # 手動對正樣本給 few_weight 倍權重，負樣本給 more_weight 倍                        
+                else:
+                    weight_loss_mask = torch.where(torch.cat(eval_targets) > weighted_threshold, few_weight, more_weight)
+            
         mean_batch_eval_loss_W_penalty = criterion(torch.cat(eval_outputs),torch.cat(eval_targets), model, weight_loss_mask)# with weighted loss # without batch effect the loss
         mean_batch_eval_loss_WO_penalty = criterion.loss_WO_penalty.cpu().detach().numpy()
 
@@ -168,9 +169,9 @@ def train(model, optimizer,
           weighted_threshold, few_weight, more_weight, TrackGradient=False):
     
     # Training with early stopping (assuming you've defined the EarlyStopping logic)
-    if warmup_lr is not None:
+    if warmup_lr is True:
         lr_scheduler = warmup_lr_scheduler(optimizer, decrese_epoch, Decrease_percent,continuous)
-    if CosineAnnealing_LR is not None:
+    if CosineAnnealing_LR is True:
         lr_scheduler = CosineAnnealingLR(optimizer, T_max=T_max, eta_min=eta_min)
     if TrackGradient is True:
         Grad_tracker = GradientNormTracker(batch_size,check_frequency=10, enable_plot=True)  # Enable or disable plotting
@@ -203,8 +204,11 @@ def train(model, optimizer,
 
             if target.numel() != 0: # 確保batch中target去除掉nan後還有數值 (count)
                 batch_idx_without_nan_count+=1# if 這個batch有數值batch才累加 
-                if weighted_threshold is not None:
-                    weight_loss_mask = torch.where(target > weighted_threshold, few_weight, more_weight)
+                if 'weighted' in criterion.loss_type :    
+                    if 'BCE' in criterion.loss_type :
+                        weight_loss_mask = torch.where(target == 1, few_weight, more_weight) # 手動對正樣本給 few_weight 倍權重，負樣本給 more_weight 倍
+                    else:
+                        weight_loss_mask = torch.where(target > weighted_threshold, few_weight, more_weight)
                 loss = criterion(outputs.reshape(-1), target.to(torch.float32).reshape(-1), model, weight_loss_mask)
                 # assert loss.requires_grad == True  # Ensure gradients are being computed
                 loss.backward()  # Compute gradients
@@ -214,7 +218,7 @@ def train(model, optimizer,
                     gradient_norms_list = None
                 #torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0) # Apply gradient clipping
                 optimizer.step()  # Update weights
-                
+
 
         (val_targets, val_outputs,
          val_epoch_loss_W_penalty_ls,  val_epoch_loss_WO_penalty_ls, 

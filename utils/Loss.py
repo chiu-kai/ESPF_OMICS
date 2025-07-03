@@ -104,6 +104,7 @@ class Custom_Weighted_LossFunction(nn.Module):
 
         self.mse_loss = nn.MSELoss(reduction="none")  # Keep per-sample loss # 不要取平均 #輸出sample loss list
         self.mae_loss = nn.L1Loss(reduction="none")  # Keep per-sample loss # 不要取平均 #輸出sample loss list
+        self.bce_loss = nn.BCELoss(reduction="none") # reduction (default 'mean')
         
     def forward(self, prediction, target, model=None, weights=None):
         """
@@ -123,6 +124,8 @@ class Custom_Weighted_LossFunction(nn.Module):
             batch_sample_loss = self.mse_loss(prediction, target)
         elif self.loss_type == "weighted_MAE":
             batch_sample_loss = self.mae_loss(prediction, target)
+        elif self.loss_type == "weighted_BCE": # sigmoid is already done in model
+            batch_sample_loss = self.bce_loss(prediction, target)
         elif self.loss_type == "weighted_MAE+MSE":
             mae = self.mae_loss(prediction, target)
             mse = self.mse_loss(prediction, target)

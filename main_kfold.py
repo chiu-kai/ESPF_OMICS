@@ -96,6 +96,10 @@ for omic_type in include_omics:
 drug_df = pd.read_csv( drug_df_path, sep=',', index_col=0)
 print("drug_df",drug_df.shape)
 drug_df = drug_df.sort_index(axis=0).sort_index(axis=1)
+if "BRD_ID" in drug_df.columns:
+    drug_df["BRD_ID"] = drug_df["BRD_ID"].replace({"BRD-K61250484-001-02-3": "BRD-6125",
+                                                    "BRD-K91701654-001-03-1 (CID5354033)": "BRD-K91701654-001-03-1",
+                                                    "BRD-K18787491-001-08-6 (CID3006531)": "BRD-K18787491-001-08-6"})
 print("drug_df",drug_df.shape)
 print("AUC_df_numerical",AUC_df_numerical.shape)
 # matched AUCfile and omics_data samples
@@ -103,10 +107,13 @@ AUC_df_numerical= (AUC_df_numerical.loc[matched_samples])
 print("AUC_df_numerical match samples",AUC_df_numerical.shape)
 # median_value = np.nanmedian(AUC_df_numerical.values)  # Directly calculate median, ignoring NaNs
 # print("median_value",median_value)    
-if criterion.loss_type == "BCE":
+if 'BCE' in criterion.loss_type :
     AUC_df = pd.read_csv(AUC_df_path, sep=',', index_col=0).loc[matched_samples] # binary data
     AUC_df = AUC_df.sort_index(axis=0).sort_index(axis=1)
     print("AUC_df",AUC_df.shape)
+    if "BRD_ID" in drug_df.columns:
+        drug_df = drug_df[drug_df["BRD_ID"].isin(AUC_df.columns.str.extract(r"(BRD-[^\)]+)", expand=False))]
+    print("drug_df",drug_df.shape)
 else:
     AUC_df = AUC_df_numerical.copy()
 del AUC_df_numerical
@@ -123,24 +130,31 @@ if test is True:
     print("AUC_df",AUC_df.shape)
 
 if 'weighted' in criterion.loss_type :    
-    # Set threshold based on the 90th percentile # 將高於threshold的AUC權重增加
-    weighted_threshold = np.nanpercentile(AUC_df.values, 90)    
-    total_samples = (~np.isnan(AUC_df.values)).sum().item()
-    fewWt_samples = (AUC_df.values > weighted_threshold).sum().item()
-    moreWt_samples = total_samples - fewWt_samples
-    few_weight = total_samples / (2 * fewWt_samples)  
-    more_weight = total_samples / (2 * moreWt_samples)   
-    # print("weighted_threshold",weighted_threshold)
-    # print("total_samples",total_samples)
-    # print("few_samples",few_samples)
-    # print("more_samples",more_samples)
-    # print("few_weight",few_weight)
-    # print("more_weight",more_weight)
+    if 'BCE' in criterion.loss_type :
+        weighted_threshold = None
+        total_samples = (~np.isnan(AUC_df.values)).sum().item()
+        fewWt_samples = (AUC_df.values == 0).sum().item()
+        moreWt_samples = (AUC_df.values == 1).sum().item()
+        few_weight = total_samples / (2 * fewWt_samples)  
+        more_weight = total_samples / (2 * moreWt_samples) 
+    else:
+        # Set threshold based on the 90th percentile # 將高於threshold的AUC權重增加
+        weighted_threshold = np.nanpercentile(AUC_df.values, 90)    
+        total_samples = (~np.isnan(AUC_df.values)).sum().item()
+        fewWt_samples = (AUC_df.values > weighted_threshold).sum().item()
+        moreWt_samples = total_samples - fewWt_samples
+        few_weight = total_samples / (2 * fewWt_samples)  
+        more_weight = total_samples / (2 * moreWt_samples)   
+        # print("weighted_threshold",weighted_threshold)
+        # print("total_samples",total_samples)
+        # print("few_samples",few_samples)
+        # print("more_samples",more_samples)
+        # print("few_weight",few_weight)
+        # print("more_weight",more_weight)
 else:
     weighted_threshold = None
     few_weight = None
     more_weight = None
-print("weighted_threshold:",weighted_threshold)
 
 
 # convert SMILES to subword token by ESPF
@@ -172,9 +186,9 @@ print(drug_encode.values[0][2])
 # generate data split id
 id_unrepeat_test, id_unrepeat_train_val = split_id(num_ccl,num_drug,splitType,kfoldCV,repeat=True)
 # repeat the test id
-if splitType == "byCCL":
+if splitType in ['byCCL', 'ModelID']:
     repeatNum = num_drug
-elif splitType == "byDrug":
+elif splitType in ['byDrug', 'drug_name']:
     repeatNum = num_ccl
 id_test = repeat_func(id_unrepeat_test, repeatNum, setname='test')
 
@@ -234,7 +248,7 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
      BEpo_trainLoss_W_penalty_ls, BEpo_trainLoss_WO_penalty_ls, 
      BEpo_valLoss_W_penalty_ls, BEpo_valLoss_WO_penalty_ls, 
      BE_val_targets, BE_val_outputs, BE_train_targets , BE_train_outputs,
-     gradient_fig, gradient_norms_list) = train( model, optimizer,  
+     gradient_fig, gradient_norms_list) = train( model, optimizer, 
                                                criterion, train_loader, val_loader, device,
                                                ESPF, Drug_SelfAttention, seed ,
                                                weighted_threshold, few_weight, more_weight, TrackGradient)
@@ -296,7 +310,7 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     # Empty PyTorch cache
     torch.cuda.empty_cache() # model 會從GPU消失，所以要evaluation時要重新load model
 # Saving the model weughts
-hyperparameter_folder_path = f'./results/{timestamp}_BF{BF}_{criterion.loss_type}_test_loss{BF_test_loss:.7f}_BestValEpo{BF_best_epoch}_{hyperparameter_folder_part}_nlayer{n_layer}_DA{deconfound_EXPembedding}' # /root/Winnie/PDAC
+hyperparameter_folder_path = f"./results/{timestamp}_BF{BF}_{criterion.loss_type}_test_loss{BF_test_loss:.7f}_BestValEpo{BF_best_epoch}_{hyperparameter_folder_part}_{''.join([f'{k}{v}' for k, v in omics_numfeatures_dict.items()])}_nlayer{n_layer}_DA-{DA_Folder}" # /root/Winnie/PDAC
 os.makedirs(hyperparameter_folder_path, exist_ok=True)
 save_path = os.path.join(hyperparameter_folder_path, f'BestValWeight.pt')
 torch.save(BF_best_weight, save_path)
@@ -314,7 +328,7 @@ if criterion.regular_type is not None:
 
 
 
-if criterion.loss_type != "BCE":
+if "BCE" not in criterion.loss_type:
     # calculate correlation
     (train_pearson, train_spearman,
     train_AllSameValuesList_count) = correlation_func(splitType, AUC_df.values,AUC_df.index,AUC_df.columns,
@@ -347,7 +361,7 @@ if criterion.loss_type != "BCE":
 #----------------------------------------------------------------------------------
 
 
-if criterion.loss_type == "BCE":
+if 'BCE' in criterion.loss_type :
     (train_cm , train_GT_0_count, train_GT_1_count, 
     train_pred_binary_0_count, train_pred_binary_1_count) =metrics_calculator.confusion_matrix(torch.cat(BF_train_targets), torch.cat(BF_train_outputs), BF_best_prob_threshold)
     (val_cm ,  val_GT_0_count, val_GT_1_count, 
@@ -362,7 +376,7 @@ if criterion.loss_type == "BCE":
 
 output_file = f"{hyperparameter_folder_path}/BF{BF}_result_performance.txt"
 with open(output_file, "w") as file:
-    if criterion.loss_type != "BCE":
+    if "BCE" not in criterion.loss_type:
         # data range
         get_data_value_range(torch.cat(BF_train_targets + BF_val_targets + BF_test_targets).tolist(),"GroundTruth_AUC", file=file)
         get_data_value_range(torch.cat(BF_train_outputs + BF_val_outputs + BF_test_outputs).tolist(),"predicted_AUC", file=file)
@@ -372,6 +386,7 @@ with open(output_file, "w") as file:
     file.write(f'kfold_losses:\n {kfold_losses}\n')# all fold loss on each set
 
     file.write(f'criterion: {criterion.loss_type}, weight_regularization: {criterion.regular_type}, regular_lambda: {criterion.regular_lambda}, penalty_value:{criterion.penalty_value}\n\n')
+    file.write(f'weighted_threshold:{weighted_threshold}, fewSample_weight:{few_weight}, moreSample_weight:{more_weight}\n\n')
     # Calculate mean and standard deviation of the all folds loss
     for set in ['train', 'val', 'test']:
         Folds_losses = [loss[set] for loss in kfold_losses.values()]
@@ -395,7 +410,7 @@ with open(output_file, "w") as file:
             BFolds_value = [value[set][type] for value in kfold_metrics.values()][BF]
             file.write(f"Best Fold {BF} {set.capitalize()} {type}: {BFolds_value:.7f}\n")
     
-    if criterion.loss_type == "BCE":
+    if 'BCE' in criterion.loss_type :
         file.write(f"Best Fold {BF} Train TP TN FP FN: {train_cm[1,1]}_{train_cm[0,0]}_{train_cm[0,1]}_{train_cm[1,0]}\n"
                    f"Best Fold {BF} Val TP TN FP FN: {val_cm[1,1]}_{val_cm[0,0]}_{val_cm[0,1]}_{val_cm[1,0]}\n"
                    f"Best Fold {BF} Test TP TN FP FN: {test_cm[1,1]}_{test_cm[0,0]}_{test_cm[0,1]}_{test_cm[1,0]}\n"
@@ -405,7 +420,7 @@ with open(output_file, "w") as file:
                    f"Best Fold {BF} Val pred_binary_count_0_1: {val_pred_binary_0_count}_{val_pred_binary_1_count}\n"
                    f"Best Fold {BF} Test GT_count_0_1: {test_GT_0_count}_{test_GT_1_count}\n"
                    f"Best Fold {BF} Test pred_binary_count_0_1: {test_pred_binary_0_count}_{test_pred_binary_1_count}\n")   
-        file.write(f"\nBF_best_prob_threshold: {BF_best_prob_threshold}\n") 
+        file.write(f"\nBF_best_val_prob_threshold: {BF_best_prob_threshold}\n") 
     else:
     # Pearson and Spearman statistics
         # <=0的都=0
@@ -456,11 +471,11 @@ if model_inference is True:
     if model_name == "Omics_DrugESPF_Model":
         model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-                            n_layer, deconfound_EXPembedding, TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+                            n_layer, deconfound_EXPembedding, TCGA_pretrain_weight_path_dict= None)
     elif model_name == "Omics_DCSA_Model":
         model = Omics_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-                            n_layer, deconfound_EXPembedding, TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+                            n_layer, deconfound_EXPembedding, TCGA_pretrain_weight_path_dict= None)
     model.to(device=device)
     model.load_state_dict(BF_best_weight) 
 
@@ -493,9 +508,9 @@ if model_inference is True:
             print(f"{omic_type} num_features",omics_numfeatures_dict[omic_type])
 
 #         drug_df_path= "../data/DAPL/share/GDSC_drug_merge_pubchem_dropNA_MACCS.csv"
-        drug_df = pd.read_csv( drug_df_path, sep=',', index_col=0)
+        drug_df = pd.read_csv( drug_df_path, sep=',')
         # get specific drug and ccl
-        drug_df= drug_df[drug_df['name'] == drug_name]
+        drug_df = drug_df[drug_df['name'].str.lower() == drug_name.lower()]
         print(drug_df)
         if ESPF is True:
             drug_smiles =drug_df["SMILES"] # 
@@ -526,18 +541,25 @@ if model_inference is True:
         print(response_matrix_tensor.shape)
 
         if 'weighted' in criterion.loss_type :    
-            # Set threshold based on the 90th percentile # 將高於threshold的AUC權重增加
-            weighted_threshold = np.nanpercentile(AUC_df.values, 90)    
-            total_samples = (~np.isnan(AUC_df.values)).sum().item()
-            fewWt_samples = (AUC_df.values > weighted_threshold).sum().item()
-            moreWt_samples = total_samples - fewWt_samples
-            few_weight = total_samples / (2 * fewWt_samples)  
-            more_weight = total_samples / (2 * moreWt_samples)   
+            if 'BCE' in criterion.loss_type :
+                weighted_threshold = None
+                total_samples = (~np.isnan(AUC_df.values)).sum().item()
+                fewWt_samples = (AUC_df.values == 0).sum().item()
+                moreWt_samples = (AUC_df.values == 1).sum().item()
+                few_weight = total_samples / (2 * fewWt_samples)  
+                more_weight = total_samples / (2 * moreWt_samples) 
+            else:
+                # Set threshold based on the 90th percentile # 將高於threshold的AUC權重增加
+                weighted_threshold = np.nanpercentile(AUC_df.values, 90)    
+                total_samples = (~np.isnan(AUC_df.values)).sum().item()
+                fewWt_samples = (AUC_df.values > weighted_threshold).sum().item()
+                moreWt_samples = total_samples - fewWt_samples
+                few_weight = total_samples / (2 * fewWt_samples)  
+                more_weight = total_samples / (2 * moreWt_samples)   
         else:
             weighted_threshold = None
             few_weight = None
             more_weight = None
-        print("weighted_threshold:",weighted_threshold)
 
         set_seed(seed)
         dataset = OmicsDrugDataset(omics_data_tensor_dict, drug_features_tensor, response_matrix_tensor, splitType, include_omics)
@@ -558,7 +580,7 @@ if model_inference is True:
         drugs_metrics[drug_name]["eval_outputs_before_final_activation_list"]=eval_outputs_before_final_activation_list
         drugs_metrics[drug_name][criterion.loss_type] = mean_batch_eval_loss_WO_penalty
 
-        if criterion.loss_type == "BCE":
+        if 'BCE' in criterion.loss_type :
             (test_cm ,  test_GT_0_count, test_GT_1_count, 
             test_pred_binary_0_count, test_pred_binary_1_count ) =metrics_calculator.confusion_matrix(torch.cat(eval_targets), torch.cat(eval_outputs), BF_best_prob_threshold)
 
@@ -583,7 +605,7 @@ if model_inference is True:
     
     output_file = f"{hyperparameter_folder_path}/BF{BF}_{cohort}_inference_result.txt"
     with open(output_file, "w") as file:
-        if criterion.loss_type == "BCE":
+        if 'BCE' in criterion.loss_type :
             for drug_name, metrics in drugs_metrics.items():
                 file.write(f"\n{drug_name}\n")
                 file.write(f"BF_best_prob_threshold: {BF_best_prob_threshold} according to {metric}\n")

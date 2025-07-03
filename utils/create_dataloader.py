@@ -2,6 +2,59 @@
 from torch.utils.data import Dataset, DataLoader, TensorDataset
 import torch
 from tqdm import tqdm
+import numpy as np
+from collections import defaultdict
+# from tools.dataprocess import smile_to_graph, cat_tensor_with_drug
+
+class InstanceResponseDataset(torch.utils.data.Dataset):
+    def __init__(self, response_df, expression_df, drug_smiles_df,drug_graph,include_omics, device):
+        """
+        response_df: 包含 DepMap_ID, DRUG_NAME, Class 的 dataframe
+        expression_df: 索引為 DepMap_ID 的 expression 數值 dataframe
+        drug_smiles_df: 索引為 DRUG_NAME 的 smiles 結構 dataframe (欄位 'SMILES')
+        """
+        self.response_df = response_df.reset_index(drop=True)
+        self.drug_smiles_df = drug_smiles_df
+        self.include_omics = include_omics
+        self.device = device
+        # 預先建立 expression 查表字典：key 為 sample_id，value 為對應 tensor
+        self.expr_dict = defaultdict(dict)
+        for omic_type in self.include_omics:
+            for sample_id in expression_df[omic_type].index:
+                # 轉為 numpy array，再轉為 tensor
+                expr = expression_df[omic_type].loc[sample_id].values.astype(np.float32)
+                # print("expr", expr.shape)
+                self.expr_dict[omic_type][sample_id] = torch.tensor(expr, dtype=torch.float32).to(self.device)
+        # 預先計算每個藥物的 graph，存入 dict
+        self.drug_graph_dict = {}
+        for drug_id in self.drug_smiles_df.index:
+            if drug_graph is True:
+                continue
+                # drug_smile = self.drug_smiles_df.loc[drug_id]['SMILES']
+                # c_size, atom_features_list, edge_index = smile_to_graph(drug_smile)
+                # drug_x = torch.tensor(np.array(atom_features_list), dtype=torch.float32)
+                # drug_edge_index = torch.tensor(edge_index, dtype=torch.long).t().contiguous()
+                # drug_data = Data(x=drug_x, edge_index=drug_edge_index)
+                # self.drug_graph_dict[drug_id] = drug_data.to(self.device)
+            else:
+                drug_encode = self.drug_smiles_df.loc[drug_id]["drug_encode"]
+                self.drug_graph_dict[drug_id] = torch.tensor(np.array(drug_encode), dtype=torch.long).to(self.device)
+    def __len__(self):
+        return len(self.response_df)
+    def __getitem__(self, idx):
+        row = self.response_df.iloc[idx]
+        sample_id = row['ModelID']
+        drug_id = row['drug_name']
+        target = float(row['Label'])
+        # 從查表字典中直接取得 gene features
+        gene_feature = {omic_type: self.expr_dict[omic_type][sample_id]
+                             for omic_type in self.include_omics}
+        # gene_feature = self.expr_dict[sample_id]
+        # 從預先計算好的字典中取出對應的藥物 graph
+        drug_data = self.drug_graph_dict[drug_id]
+        target = torch.tensor(target, dtype=torch.float32).to(self.device)
+        return gene_feature, drug_data, target
+
 
 class OmicsDrugDataset(Dataset):
     def __init__(self, omics_data_tensor_dict, drug_features_tensor, response_matrix_tensor , splitType, include_omics):
@@ -19,20 +72,18 @@ class OmicsDrugDataset(Dataset):
     def __len__(self):
         return self.num_cells * self.num_drugs
     def __getitem__(self, idx):
-        if self.splitType == 'byCCL': 
+        if self.splitType in ['byCCL', 'ModelID']:
             self.cell_idx = idx // self.num_drugs  
             self.drug_idx = idx % self.num_drugs   
-        elif self.splitType == 'byDrug':
+        elif self.splitType in ['byDrug', 'drug_name']:
             self.cell_idx = idx % self.num_cells   
             self.drug_idx = idx // self.num_cells   
             
         # wrong code!!!    
         # for omic_type in self.include_omics:
         #     self.omics_data_tensor[omic_type] = self.omics_data_tensor_dict[omic_type][self.cell_idx]
-        
         self.omics_data_tensor = {omic_type: self.omics_data_tensor_dict[omic_type][self.cell_idx] 
                              for omic_type in self.include_omics}
-        
         drug_features = self.drug_features_tensor[self.drug_idx]
         response_value = self.response_matrix_tensor[self.cell_idx, self.drug_idx]
         return  self.omics_data_tensor, drug_features, response_value

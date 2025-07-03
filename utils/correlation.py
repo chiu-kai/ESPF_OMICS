@@ -13,11 +13,11 @@ def correlation_func(splitType, data_AUC_matrix,ccl_names_AUC,drug_names_AUC,id_
     pearson=[]
     spearman=[]
     start=0
-    if splitType == 'byCCL':
+    if splitType in ['byCCL', 'ModelID']:
         if len(data_AUC_matrix) != len(ccl_names_AUC):
             data_AUC_matrix = data_AUC_matrix.T
             print(f'transpose data_AUC_matrix to match split {splitType} ({data_AUC_matrix.shape})')
-    elif splitType == 'byDrug':
+    elif splitType in ['byDrug', 'drug_name']:
         if len(data_AUC_matrix) != len(drug_names_AUC):
             data_AUC_matrix = data_AUC_matrix.T
             print(f"transpose data_AUC_matrix to match split {splitType} ({data_AUC_matrix.shape})")
@@ -48,18 +48,18 @@ def correlation_func(splitType, data_AUC_matrix,ccl_names_AUC,drug_names_AUC,id_
                 # correlation_coef=abs(correlation_coef)
                 spearman_correlation_coef, p_value = spearmanr(predvalues.cpu().numpy(), GTvalues.cpu().numpy())
                 # spearman_correlation_coef = abs(spearman_correlation_coef)
-                if splitType == 'byCCL':
+                if splitType in ['byCCL', 'ModelID']:
                     pearson.append(correlation_coef)
                     spearman.append(spearman_correlation_coef)     
 #                     print(ccl_names_AUC[key],":",correlation_coef)
-                elif splitType == 'byDrug':
+                elif splitType in ['byDrug', 'drug_name']:
                     pearson.append(correlation_coef)
                     spearman.append(spearman_correlation_coef) 
 #                     print(drug_names_AUC[key],":",correlation_coef)
             else:
-                if splitType == 'byCCL':
+                if splitType in ['byCCL', 'ModelID']:
                     print(f"No Correlation: len(GTvalues)<2: {ccl_names_AUC[key]} ")
-                elif splitType == 'byDrug':
+                elif splitType in ['byDrug', 'drug_name']:
                     print(f"No Correlation: len(GTvalues)<2: {drug_names_AUC[key]} ")
     return pearson, spearman, AllSameValuesList_count
 

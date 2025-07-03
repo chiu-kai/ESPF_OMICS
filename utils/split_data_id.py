@@ -40,10 +40,10 @@ def repeat_func(id_unrepeat, repeatNum, setname=''):
 
 def split_id(num_ccl,num_drug , splitType, kfoldCV ,repeat):
     random.seed(42)
-    if splitType == "byCCL":
+    if splitType in ['byCCL', 'ModelID']:
         sampleNum = num_ccl
         repeatNum = num_drug
-    elif splitType == "byDrug":
+    elif splitType in ['byDrug', 'drug_name']:
         sampleNum = num_drug
         repeatNum = num_ccl
         
@@ -83,7 +83,7 @@ def repeat_func(id_unrepeat, repeatNum, setname=''):
 
 def split_id(num_ccl,num_drug , splitType ,repeat, kFold):
     random.seed(42)
-    if splitType == "byCCL":
+    if splitType in ['byCCL', 'ModelID']:
         all_unrepeat_ids = list(range(0, num_ccl))
         id_unrepeat_test = random.sample(all_unrepeat_ids, int(num_ccl*0.10))
         id_unrepeat_train_val = list(set(all_unrepeat_ids) - set(id_unrepeat_test))
@@ -106,7 +106,7 @@ def split_id(num_ccl,num_drug , splitType ,repeat, kFold):
                 return id_unrepeat_train, id_unrepeat_val, id_unrepeat_test, id_unrepeat_train_val, id_train, id_val, id_test #, id_train_val
             else: # for only mut or only exp    
                 return id_unrepeat_train, id_unrepeat_val, id_unrepeat_test, id_unrepeat_train_val
-    elif splitType == "byDrug":
+    elif splitType in ['byDrug', 'drug_name']:
         all_unrepeat_ids = list(range(0, num_drug))
         id_unrepeat_test = random.sample(all_unrepeat_ids, int(num_drug*0.10))
         id_unrepeat_train_val = list(set(all_unrepeat_ids) - set(id_unrepeat_test))

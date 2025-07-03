@@ -11,7 +11,7 @@ def repeat_data(*args, splitType, num_ccl, num_drug, device):
         datalist = [torch.tensor(arg, dtype=torch.float32).to(device=device) for arg in args]
         print("convert input args to torch.tensor.float32 and add to device for computing")
         
-    if splitType == 'byCCL':
+    if splitType in ['byCCL', 'ModelID']:
         if len(datalist) == 3: # mut/exp、drug、AUC
             # Perform the repeat operation on data_mut or data_exp
             data = datalist[0].unsqueeze(1).repeat(1, num_drug, 1).view(-1, datalist[0].shape[1])
@@ -57,7 +57,7 @@ def repeat_data(*args, splitType, num_ccl, num_drug, device):
         else:
             print("check the input args")
 
-    elif splitType == 'byDrug':
+    elif splitType in ['byDrug', 'drug_name']:
         if len(datalist) == 3:
             # Perform the repeat operation on data_mut or data_exp
             data = datalist[0].repeat(num_drug, 1)
