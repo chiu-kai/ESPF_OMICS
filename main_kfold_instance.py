@@ -26,7 +26,7 @@ from scipy.stats import ttest_ind
 import time
 
 from utils.ESPF_drug2emb import drug2emb_encoder
-from utils.Model import Omics_DrugESPF_Model, Omics_DCSA_Model
+from utils.Model import Omics_DrugESPF_Model, Omics_DCSA_Model, GIN_DCSA_model
 from utils.split_data_id import split_id,repeat_func
 from utils.create_dataloader import OmicsDrugDataset,InstanceResponseDataset
 from utils.train import train, evaluation
@@ -180,8 +180,11 @@ test_df = AUC_df[AUC_df[splitType].isin(test_samples)]
 
 #create dataset
 set_seed(seed)
+def collate_fn(batch):
+        gene_feature, drug_list, target = zip(*batch)
+        return list(gene_feature), list(drug_list), list(target)
 test_dataset = InstanceResponseDataset(test_df, omics_data_dict, drug_df, drug_graph, include_omics, device)
-test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False) #, num_workers=4, pin_memory=True
+test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn) #, num_workers=4, pin_memory=True
 # k-fold run
 kfold_losses= {}
 kfold_metrics={}
@@ -206,8 +209,8 @@ for fold, (train_idx, val_idx) in enumerate(kfold.split(train_val_samples)):
     set_seed(seed)
     train_dataset = InstanceResponseDataset(train_df, omics_data_dict, drug_df, drug_graph, include_omics, device)
     val_dataset = InstanceResponseDataset(val_df, omics_data_dict, drug_df, drug_graph, include_omics, device)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
 
     # train
     # Init the neural network 
@@ -220,6 +223,10 @@ for fold, (train_idx, val_idx) in enumerate(kfold.split(train_val_samples)):
         model = Omics_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
                             n_layer,deconfound_EXPembedding,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+    elif model_name == "GIN_DCSA_model":
+        model = GIN_DCSA_model(omics_encode_dim_dict, activation_func,activation_func_final,dense_layer_dim, device,
+                            drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, 
+                            n_layer, deconfound_EXPembedding,TCGA_pretrain_weight_path_dict=TCGA_pretrain_weight_path_dict)
 
     model.to(device=device)
 
@@ -518,26 +525,6 @@ if model_inference is True:
         print(drug_features_tensor.shape)# Fc1c[nH]c(=O)[nH]c1=O 
         print(response_matrix_tensor.shape)
 
-        if 'weighted' in criterion.loss_type :    
-            if 'BCE' in criterion.loss_type :
-                weighted_threshold = None
-                total_samples = (~np.isnan(AUC_df.values)).sum().item()
-                fewWt_samples = (AUC_df.values == 0).sum().item()
-                moreWt_samples = (AUC_df.values == 1).sum().item()
-                few_weight = total_samples / (2 * fewWt_samples)  
-                more_weight = total_samples / (2 * moreWt_samples) 
-            else:
-                # Set threshold based on the 90th percentile # 將高於threshold的AUC權重增加
-                weighted_threshold = np.nanpercentile(AUC_df.values, 90)    
-                total_samples = (~np.isnan(AUC_df.values)).sum().item()
-                fewWt_samples = (AUC_df.values > weighted_threshold).sum().item()
-                moreWt_samples = total_samples - fewWt_samples
-                few_weight = total_samples / (2 * fewWt_samples)  
-                more_weight = total_samples / (2 * moreWt_samples)   
-        else:
-            weighted_threshold = None
-            few_weight = None
-            more_weight = None
 
         set_seed(seed)
         dataset = OmicsDrugDataset(omics_data_tensor_dict, drug_features_tensor, response_matrix_tensor, splitType, include_omics)

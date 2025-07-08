@@ -3,6 +3,7 @@ from tracemalloc import start
 import torch
 import copy
 import torch.nn as nn
+from torch_geometric.data import Batch
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -98,6 +99,8 @@ def log_gradient_norms(model):
     print(f"Total Gradient Norm: {total_norm:.4f}")
     return total_norm
 
+kwargs = {"ESPF":ESPF,"Drug_SelfAttention":Drug_SelfAttention,"DCSA":DCSA}
+
 def evaluation(model, eval_epoch_loss_W_penalty_ls, eval_epoch_loss_WO_penalty_ls, 
                criterion, eval_loader, device,ESPF,Drug_SelfAttention, 
                weighted_threshold, few_weight, more_weight, 
@@ -115,8 +118,12 @@ def evaluation(model, eval_epoch_loss_W_penalty_ls, eval_epoch_loss_WO_penalty_l
     weight_loss_mask = None
     with torch.no_grad():
         for inputs in eval_loader:
-            omics_tensor_dict,drug, target = inputs[0],inputs[1], inputs[-1]#.to(device=device)
-            model_output = model(omics_tensor_dict, drug, device, **{"ESPF":ESPF,"Drug_SelfAttention":Drug_SelfAttention}) #drug.to(torch.float32)
+            # omics_tensor_dict,drug, target = inputs[0],inputs[1], inputs[-1]#.to(device=device)
+            gene_list, drug_data_list, target_list = inputs # batch
+            omics_tensor_dict = {omic: torch.stack([d[omic] for d in gene_list], dim=0) for omic in include_omics}
+            target = torch.stack(target_list) # torch.Size([bsz, 1]) # bsz: batch size
+            drug = Batch.from_data_list(drug_data_list)
+            model_output = model(omics_tensor_dict, drug, device, **kwargs) #drug.to(torch.float32)
             outputs = model_output[0]  # model_output[1] # model_output[2] # output.shape(n_sample, 1)
             mask = ~torch.isnan(target)# Create a mask for non-NaN values in tensor # 去除nan的項 # mask.shape(n_sample, 1)
             target = target[mask]# Apply the mask to filter out NaN values from both tensors # target.shape(n_sample, 1)->(n_sample-nan, 1)
@@ -192,10 +199,13 @@ def train(model, optimizer,
         weight_loss_mask = None
         for batch_idx,inputs in enumerate(train_loader):
             optimizer.zero_grad()
-            omics_tensor_dict,drug = inputs[0],inputs[1]
-            target = inputs[2]#.to(device=device)
             
-            model_output = model(omics_tensor_dict, drug, device,**{"ESPF":ESPF,"Drug_SelfAttention":Drug_SelfAttention}) #drug.to(torch.float32)
+            gene_list, drug_data_list, target_list = inputs # batch
+            omics_tensor_dict = {omic: torch.stack([d[omic] for d in gene_list], dim=0) for omic in include_omics}
+            target = torch.stack(target_list) # torch.Size([bsz, 1]) # bsz: batch size
+            drug = Batch.from_data_list(drug_data_list)
+
+            model_output = model(omics_tensor_dict, drug, device,**kwargs) #drug.to(torch.float32)
             outputs =model_output[0]
             # attention_score_matrix torch.Size([bsz, 8, 50, 50])# softmax(without dropout)
             mask = ~torch.isnan(target)# Create a mask for non-NaN values in tensor # 0:nan, 1:non-nan
