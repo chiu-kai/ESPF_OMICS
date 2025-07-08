@@ -82,9 +82,6 @@ for omic_type in include_omics:
             scaler = StandardScaler() 
             omics_data_dict[omic_type] = pd.DataFrame(scaler.fit_transform(omics_data_dict[omic_type]),index=omics_data_dict[omic_type].index,columns=omics_data_dict[omic_type].columns)
             scaler_dict[omic_type] = scaler  # save the fitted scaler for latter inference
-    if test is True:
-        # Specify the index as needed
-        omics_data_dict[omic_type] = omics_data_dict[omic_type][:76]  # Adjust the row selection as needed
         
     # omics_data_tensor_dict[omic_type]  = torch.tensor(omics_data_dict[omic_type].values, dtype=torch.float32).to(device)
     omics_numfeatures_dict[omic_type] = omics_data_dict[omic_type].shape[1]
@@ -122,7 +119,7 @@ if AUCtransform == "-log10":
     AUC_df = -np.log10(AUC_df)
 
 if test is True:
-    drug_df=drug_df[:22]
+    drug_df=drug_df[:5]
     AUC_df = AUC_df[AUC_df['drug_name'].isin(drug_df.index)]
     print("drug_df",drug_df.shape)
     print("AUC_df",AUC_df.shape)
@@ -462,6 +459,11 @@ if model_inference is True:
         model = Omics_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
                             n_layer, deconfound_EXPembedding, TCGA_pretrain_weight_path_dict= None)
+    elif model_name == "GIN_DCSA_model":
+        model = GIN_DCSA_model(omics_encode_dim_dict, activation_func,activation_func_final,dense_layer_dim, device,
+                            drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, 
+                            n_layer, deconfound_EXPembedding,TCGA_pretrain_weight_path_dict=None)
+
     model.to(device=device)
     model.load_state_dict(BF_best_weight) 
 
@@ -474,7 +476,10 @@ if model_inference is True:
                 CohortExp_df = pd.DataFrame(latent_dict).T # 32
         else:
             CohortExp_df = pd.read_csv(f"../data/DAPL/share/{cohort}_fromDAPL/{drug_name}/{cohort.lower()}data{geneNUM}.csv", sep=',', index_col=0) #1426
-        label_df = pd.read_csv(f"../data/DAPL/share/{cohort}_fromDAPL/{drug_name}/{cohort.lower()}label{geneNUM}.csv", sep=',', index_col=0)
+        label_df = pd.read_csv(f"../data/DAPL/share/{cohort}_fromDAPL/{drug_name}/{cohort.lower()}label{geneNUM}.csv", sep=',')
+        label_df.columns.values[0] = 'ModelID'
+        label_df.columns.values[1] = 'Label'
+        label_df['drug_name'] = drug_name
         # label_df = 1 - label_df # make label 0 to 1, 1 to 0 to match regressionpredicted output. after that 0: sensitive, 1: resistant
         CohortExp_df = CohortExp_df.sort_index(axis=0).sort_index(axis=1)
         print(f"{cohort}exp {drug_name}data",CohortExp_df.shape)
@@ -487,48 +492,43 @@ if model_inference is True:
                 if omic_type == "Exp":
                     scaler = scaler_dict[omic_type]
                     omics_data_dict[omic_type] = pd.DataFrame(scaler.transform(CohortExp_df),index=CohortExp_df.index,columns=CohortExp_df.columns) # use fitted CCLE scaler to transform TCGA data
-            omics_data_tensor_dict[omic_type]  = torch.tensor(omics_data_dict[omic_type].values, dtype=torch.float32).to(device)
-            omics_numfeatures_dict[omic_type] = omics_data_tensor_dict[omic_type].shape[1]
+            # omics_data_tensor_dict[omic_type]  = torch.tensor(omics_data_dict[omic_type].values, dtype=torch.float32).to(device)
+            omics_numfeatures_dict[omic_type] = omics_data_dict[omic_type].shape[1]
 
-            print(f"{omic_type} tensor shape:", omics_data_tensor_dict[omic_type].shape)
+            # print(f"{omic_type} tensor shape:", omics_data_tensor_dict[omic_type].shape)
             print(f"{omic_type} num_features",omics_numfeatures_dict[omic_type])
 
 #         drug_df_path= "../data/DAPL/share/GDSC_drug_merge_pubchem_dropNA_MACCS.csv"
         drug_df = pd.read_csv( drug_df_path, sep=',')
+        drug_df['name'] = drug_df['name'].str.lower()
+        drug_df = drug_df.set_index('name', drop=False)
         # get specific drug and ccl
         drug_df = drug_df[drug_df['name'].str.lower() == drug_name.lower()]
+        
         print(drug_df)
         if ESPF is True:
-            drug_smiles =drug_df["SMILES"] # 
-            print("drug_smiles",drug_smiles)
+            print("drug_smiles",drug_df["SMILES"])
             # 挑出重複的SMILES
-            duplicate =  drug_smiles[drug_smiles.duplicated(keep=False)]
+            duplicate =  drug_df["SMILES"][drug_df["SMILES"].duplicated(keep=False)]
             #ESPF
             vocab_path = "./ESPF/drug_codes_chembl_freq_1500.txt" # token
             sub_csv = pd.read_csv("./ESPF/subword_units_map_chembl_freq_1500.csv")# token with frequency
             # 將drug_smiles 使用_drug2emb_encoder function編碼成subword vector
-            drug_encode = pd.Series(drug_smiles).apply(drug2emb_encoder, args=(vocab_path, sub_csv, max_drug_len))
-            drug_features_tensor = torch.tensor(np.array([i[:2] for i in drug_encode.values]), dtype=torch.long).to(device)
+            drug_df["drug_encode"] = pd.Series(drug_df["SMILES"]).apply(drug2emb_encoder, args=(vocab_path, sub_csv, max_drug_len))
+            print("drug_encode",type(drug_df["drug_encode"]))
+            drug_df["drug_encode"] = [i[:2] for i in drug_df["drug_encode"].values]
         else:
-            drug_encode = drug_df["MACCS166bits"]
-            drug_encode_list = [list(map(int, item.split(','))) for item in drug_encode.values]
-            print("MACCS166bits_drug_encode_list type: ")# ,type(drug_encode_list))
-            # Convert your data to tensors if they're in numpy
-            drug_features_tensor = torch.tensor(np.array(drug_encode_list), dtype=torch.long).to(device)
+            drug_df["drug_encode"]=[list(map(int, item.split(','))) for item in drug_df["MACCS166bits"].values]
+
         #--------------------------------------------------------------------------------------------------------------------------
-        num_ccl = list(omics_data_tensor_dict.values())[0].shape[0]
-        num_drug = drug_encode.shape[0]
+        num_ccl = list(omics_data_dict.values())[0].shape[0]
+        num_drug = drug_df["drug_encode"].shape[0]
         print("num_ccl,num_drug: ",num_ccl,num_drug)
-
-        response_matrix_tensor = torch.tensor(label_df.values, dtype=torch.float32).to(device).unsqueeze(1)
-        # print(omics_data_tensor_dict)
-        print(drug_features_tensor.shape)# Fc1c[nH]c(=O)[nH]c1=O 
-        print(response_matrix_tensor.shape)
-
+# Fc1c[nH]c(=O)[nH]c1=O 
 
         set_seed(seed)
-        dataset = OmicsDrugDataset(omics_data_tensor_dict, drug_features_tensor, response_matrix_tensor, splitType, include_omics)
-        onedrug_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+        dataset = InstanceResponseDataset(label_df, omics_data_dict, drug_df, drug_graph, include_omics, device)
+        onedrug_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
 
         # eval_targets, eval_outputs,predAUCwithUnknownGT, AttenScorMat_DrugSelf, AttenScorMat_DrugCellSelf,eval_outputs_before_final_activation_list, mean_batch_eval_lossWOpenalty
         (eval_targets, eval_outputs,predAUCwithUnknownGT,
