@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
 from torch.nn import Sequential, Linear, ReLU
-from torch_geometric.nn import GINConv, global_add_pool
+from torch_geometric.nn import GINConv, global_add_pool, global_mean_pool,global_max_pool
 import math
 import copy
 import numpy as np
@@ -390,12 +390,13 @@ print("Attended Values Shape:", attended_values.shape)  # (batch_size, num_drug_
 
 # End of Modules------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def create_mlpEncoder(dimList, activation_func):
+def create_mlpEncoder(dimList, activation_func,drop=0.1):
     layers = []
     for i in range(len(dimList) - 1):  
         layers.append(nn.Linear(dimList[i], dimList[i + 1]))
         if i < len(dimList) - 2:  
-            layers.append(activation_func)        
+            layers.append(activation_func) 
+            # layers.append(nn.Dropout(drop))  # 目前沒有用到dropout  
     return nn.Sequential(*layers)
 #After Commit d16fd58 use def create_mlpEncoder to build mlpEncoder for omics #Commits on Mar 29, 2025 
         ## if i < len(dimList) - 2:  
@@ -406,11 +407,11 @@ def create_mlpEncoder(dimList, activation_func):
 # Models------------------------------------------------------------------------------------------------------------------------------------------------------
 class Omics_DrugESPF_Model(nn.Module):
     def __init__(self,omics_encode_dim_dict,drug_encode_dims, activation_func,activation_func_final,dense_layer_dim, device, ESPF, Drug_SelfAttention,
-                 pos_emb_type, hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,n_layer,deconfound_EXPembedding, TCGA_pretrain_weight_path_dict=None):
+                 pos_emb_type, hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,n_layer,DA_Folder, TCGA_pretrain_weight_path_dict=None):
         super(Omics_DrugESPF_Model, self).__init__()
         self.n_layer = n_layer
 
-        if deconfound_EXPembedding is True:
+        if DA_Folder != 'None':
             self.MLP4omics_dict = nn.ModuleDict()
             for omic_type in omics_numfeatures_dict.keys():
                 self.MLP4omics_dict[omic_type] = nn.Sequential(
@@ -441,7 +442,7 @@ class Omics_DrugESPF_Model(nn.Module):
             #         activation_func
             #     )
             for omic_type in omics_numfeatures_dict.keys():
-                self.MLP4omics_dict[omic_type] = create_mlpEncoder([omics_numfeatures_dict[omic_type]] + omics_encode_dim_dict[omic_type], activation_func
+                self.MLP4omics_dict[omic_type] = create_mlpEncoder([omics_numfeatures_dict[omic_type]] + omics_encode_dim_dict[omic_type], activation_func,drop=0.1
                 )
                 # Initialize with TCGA pretrain weight
                 if TCGA_pretrain_weight_path_dict is not None:
@@ -482,11 +483,11 @@ class Omics_DrugESPF_Model(nn.Module):
                 nn.Linear(166, drug_encode_dims[0]),
                 activation_func,
                 nn.BatchNorm1d(drug_encode_dims[0]),
-                # nn.Dropout(hidden_dropout_prob),
+                nn.Dropout(hidden_dropout_prob),
                 nn.Linear(drug_encode_dims[0], drug_encode_dims[1]),
                 activation_func,
                 nn.BatchNorm1d(drug_encode_dims[1]),
-                # nn.Dropout(hidden_dropout_prob),
+                nn.Dropout(hidden_dropout_prob),
                 nn.Linear(drug_encode_dims[1], drug_encode_dims[2]),
                 activation_func,
                 nn.BatchNorm1d(drug_encode_dims[2]))
@@ -498,11 +499,11 @@ class Omics_DrugESPF_Model(nn.Module):
             nn.Linear(dense_layer_dim, dense_layer_dim),
             activation_func,
             nn.BatchNorm1d(dense_layer_dim),
-            nn.Dropout(p=0),
+            nn.Dropout(p=classifier_drop),
             nn.Linear(dense_layer_dim, dense_layer_dim), 
             activation_func,
             nn.BatchNorm1d(dense_layer_dim),
-            nn.Dropout(p=0),
+            nn.Dropout(p=classifier_drop),
             nn.Linear(dense_layer_dim, 1),
             activation_func_final)
         # Initialize weights with Kaiming uniform initialization, bias with aero
@@ -571,7 +572,7 @@ class Omics_DrugESPF_Model(nn.Module):
             if self.print_flag is True:
                 print("\n MACCS166 is applied \n")
                 self.print_flag  = False
-            drug = drug.to(torch.float32) # long -> float, because the input of linear layer should be float,才能和float的weight相乘
+            drug = drug.to(torch.float32) # torch.Size([bsz,166]), long -> float, because the input of linear layer should be float,才能和float的weight相乘
             drug_final_emb = self.MLP4MACCS(drug)# 166->[110,55,22] # to device, because the weight is on device .to(device=device)
             
         
@@ -579,7 +580,7 @@ class Omics_DrugESPF_Model(nn.Module):
         combined_mut_drug_embed = torch.cat([omic_embeddings, drug_final_emb], dim=1)#dim=1: turn into 1D
         output_before_final_activation = self.model_final_add[:-1](combined_mut_drug_embed)
         output = self.model_final_add[-1](output_before_final_activation)
-        return output, self.attention_probs,'',output_before_final_activation
+        return output, self.attention_probs,'',output_before_final_activation,None
     
 
 
@@ -588,12 +589,12 @@ class Omics_DrugESPF_Model(nn.Module):
 # Omics_DCSA_Model
 class Omics_DCSA_Model(nn.Module):
     def __init__(self,omics_encode_dim_dict,drug_encode_dims, activation_func,activation_func_final,dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
-                 hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,n_layer,deconfound_EXPembedding, TCGA_pretrain_weight_path_dict=None):
+                 hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,n_layer,DA_Folder, TCGA_pretrain_weight_path_dict=None):
         super(Omics_DCSA_Model, self).__init__()
         self.num_attention_heads = num_attention_heads
         self.n_layer = n_layer
         
-        if deconfound_EXPembedding is True:
+        if DA_Folder != 'None':
             self.MLP4omics_dict = nn.ModuleDict()
             for omic_type in omics_numfeatures_dict.keys():
                 self.MLP4omics_dict[omic_type] = nn.Sequential(
@@ -626,7 +627,7 @@ class Omics_DCSA_Model(nn.Module):
             #         activation_func
             #     )
             for omic_type in omics_numfeatures_dict.keys():
-                self.MLP4omics_dict[omic_type] = create_mlpEncoder([omics_numfeatures_dict[omic_type]] + omics_encode_dim_dict[omic_type], activation_func
+                self.MLP4omics_dict[omic_type] = create_mlpEncoder([omics_numfeatures_dict[omic_type]] + omics_encode_dim_dict[omic_type], activation_func,drop=0.1
                 )
                 # Initialize with TCGA pretrain weight
                 if TCGA_pretrain_weight_path_dict is not None:
@@ -663,11 +664,11 @@ class Omics_DCSA_Model(nn.Module):
         self.model_final_add = nn.Sequential(
             nn.Linear(dense_layer_dim[0], dense_layer_dim[1]),
             activation_func,
-            nn.Dropout(p=0.1),
+            nn.Dropout(p=classifier_drop),
             nn.BatchNorm1d(dense_layer_dim[1]), 
             nn.Linear(dense_layer_dim[1], dense_layer_dim[2]),
             activation_func,
-            nn.Dropout(p=0.1),
+            nn.Dropout(p=classifier_drop),
             nn.BatchNorm1d(dense_layer_dim[2]), 
             nn.Linear(dense_layer_dim[2], dense_layer_dim[3]),
             activation_func_final)
@@ -748,7 +749,7 @@ class Omics_DCSA_Model(nn.Module):
 
 # Type encoding (to distinguish between drug and omics)
         drug_type_encoding = torch.ones_like(drug_emb_masked[..., :1])  # Shape: [bsz, 50, 1]
-        omics_type_encoding = torch.zeros_like(omic_embeddings[..., :1])  # Shape: [bsz, i, 1]
+        omics_type_encoding = torch.zeros_like(omic_embeddings[..., :1])  # Shape: [bsz, c, 1]
         # Concatenate type encoding with the respective data
         drug_emb_masked = torch.cat([drug_emb_masked, drug_type_encoding], dim=-1)  # Shape: [bsz, 50, 129]
         omic_embeddings = torch.cat([omic_embeddings, omics_type_encoding], dim=-1)  # Shape: [bsz, c, 129]
@@ -777,15 +778,15 @@ class Omics_DCSA_Model(nn.Module):
         output_before_final_activation = self.model_final_add[:-1](append_embeddings)
         output = self.model_final_add[-1](output_before_final_activation)
 
-        return output, AttenScorMat_DrugSelf, AttenScorMat_DrugCellSelf,output_before_final_activation
+        return output, AttenScorMat_DrugSelf, AttenScorMat_DrugCellSelf,output_before_final_activation,None
 
 # GINConv model
 class GINConvNet(torch.nn.Module):
-    def __init__(self, input_dim=78, output_dim=32, dropout=0.2, pretrain_flag=False):
+    def __init__(self, input_dim=78, output_dim=32, GINconv_drop=0.2, pretrain_flag=False):
         super(GINConvNet, self).__init__()
         self.flag = pretrain_flag
         dim = 32
-        self.dropout = nn.Dropout(dropout)
+        self.dropout = nn.Dropout(GINconv_drop)
         self.relu = nn.ReLU()
         # convolution layers
         nn1 = Sequential(Linear(input_dim, dim), ReLU(), Linear(dim, dim))
@@ -827,7 +828,12 @@ class GINConvNet(torch.nn.Module):
         x = self.relu(self.conv5(x, edge_index)) # x shape after conv: torch.Size([62, 32])
         # x = self.bn5(x)
         if self.flag == False:
-            x = global_add_pool(x, batch=data.batch) # after global_add_pool batch=None torch.Size([bze, 32])
+            if drug_graph_pool == "add":
+                x = global_add_pool(x, batch=data.batch) # after global_add_pool batch=None torch.Size([bze, 32])
+            elif drug_graph_pool == "mean":
+                x = global_mean_pool(x, batch=data.batch) # after global_add_pool batch=None torch.Size([bze, 32])
+            elif drug_graph_pool == "max":
+                x = global_max_pool(x, batch=data.batch) # after global_add_pool batch=None torch.Size([bze, 32])
         x = self.relu(self.fc1_xd(x)) # output: torch.Size([1, 10])
         x = self.dropout(x)
         x = self.out(x)
@@ -837,12 +843,12 @@ class GINConvNet(torch.nn.Module):
 # GIN_DCSA_model
 class GIN_DCSA_model(nn.Module):
     def __init__(self,omics_encode_dim_dict, activation_func,activation_func_final,dense_layer_dim, device,
-                 hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, n_layer, deconfound_EXPembedding, TCGA_pretrain_weight_path_dict=None):
+                 hidden_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, n_layer, DA_Folder, TCGA_pretrain_weight_path_dict=None):
         super(GIN_DCSA_model, self).__init__()
         self.num_attention_heads = num_attention_heads
         self.n_layer = n_layer
 
-        if deconfound_EXPembedding is True:
+        if DA_Folder != 'None':
             self.MLP4omics_dict = nn.ModuleDict()
             for omic_type in omics_numfeatures_dict.keys():
                 self.MLP4omics_dict[omic_type] = nn.Sequential(
@@ -866,7 +872,7 @@ class GIN_DCSA_model(nn.Module):
             
             self.MLP4omics_dict = nn.ModuleDict()
             for omic_type in omics_numfeatures_dict.keys():
-                self.MLP4omics_dict[omic_type] = create_mlpEncoder([omics_numfeatures_dict[omic_type]] + omics_encode_dim_dict[omic_type], activation_func
+                self.MLP4omics_dict[omic_type] = create_mlpEncoder([omics_numfeatures_dict[omic_type]] + omics_encode_dim_dict[omic_type], activation_func,drop=hidden_dropout_prob
                 )
                 # Initialize with TCGA pretrain weight
                 if TCGA_pretrain_weight_path_dict is not None:
@@ -891,11 +897,11 @@ class GIN_DCSA_model(nn.Module):
         self.model_final_add = nn.Sequential(
             nn.Linear(dense_layer_dim[0], dense_layer_dim[1]),
             activation_func,
-            nn.Dropout(p=0),
+            nn.Dropout(p=classifier_drop),
             nn.Linear(dense_layer_dim[1], dense_layer_dim[2]),
-            activation_func,
-            nn.Dropout(p=0),
-            nn.Linear(dense_layer_dim[2], 1),
+#             activation_func,
+#             nn.Dropout(p=classifier_drop),
+#             nn.Linear(dense_layer_dim[2], 1),
             activation_func_final)
         # Initialize weights with Kaiming uniform initialization, bias with aero
         self._init_weights(self.model_final_add)
@@ -966,10 +972,16 @@ class GIN_DCSA_model(nn.Module):
                 print("\n DCSA is False \n")
                 self.print_flag  = False
             append_embeddings = torch.cat([ torch.cat(omic_embeddings_ls, dim=1), Drug_graph_feat], dim=1)
+            # Drug_graph_feat:torch.Size([bsz, hidden_size])
+            # torch.cat(omic_embeddings_ls, dim=1):torch.Size([bsz, hidden_size])
+            # append_embeddings:torch.Size([bsz, c*hidden_size + hidden_size])
+        
 # Final MLP
         output_before_final_activation = self.model_final_add[:-1](append_embeddings)
         output = self.model_final_add[-1](output_before_final_activation)
         
         AttenScorMat_DrugSelf= None
-        return output, AttenScorMat_DrugSelf, AttenScorMat_DrugCellSelf,output_before_final_activation
+        print('Drug_graph_feat.shape',Drug_graph_feat.shape)
+        print(type(Drug_graph_feat))
+        return output, AttenScorMat_DrugSelf, AttenScorMat_DrugCellSelf,output_before_final_activation, Drug_graph_feat[:5, :20]
 

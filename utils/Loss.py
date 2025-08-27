@@ -1,6 +1,74 @@
 import torch
 import torch.nn as nn
 
+import torch.nn.functional as F
+
+class BCE_FocalLoss(nn.Module):
+    def __init__(self, loss_type="BCE_Focal", alpha=0.25, gamma=2.0, reduction='mean'):
+        """
+        Initializes the FocalLoss module for inputs that are already probabilities (after sigmoid).
+        Args:
+            alpha (float): Weighting factor for positive and negative samples.
+                           A common value is 0.25 for positive samples (1-alpha for negative).
+            gamma (float): Focusing parameter. Higher gamma reduces the loss for easy examples.
+            reduction (str): Specifies the reduction to apply to the output:
+                             'none' | 'mean' | 'sum'. 'mean' is the default.
+        """
+        super().__init__()
+        self.loss_type = loss_type
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
+    def forward(self, inputs, targets, model=None, weights=None):
+        """
+        Args:
+            inputs (torch.Tensor): Predicted probabilities (output of sigmoid). Shape: (N, 1) or (N, ...)
+            targets (torch.Tensor): Ground truth labels (0 or 1). Shape: (N, 1) or (N, ...)
+        Returns:
+            torch.Tensor: The computed focal loss.
+        """
+        # Ensure inputs and targets are floats for calculations
+        inputs = inputs.float()
+        targets = targets.float()
+
+        # Clamp inputs to avoid log(0) errors (though F.binary_cross_entropy handles this internally too)
+        inputs = torch.clamp(inputs, min=1e-8, max=1-1e-8)
+
+        # Step 1: Compute binary cross-entropy (BCE)
+        # Use F.binary_cross_entropy since inputs are already probabilities
+        BCE_loss = F.binary_cross_entropy(inputs, targets, reduction='none')
+        # Step 2: Calculate p_t (probability of the true class)
+        # If target is 1, p_t is 'inputs'. If target is 0, p_t is '1 - inputs'.
+        # This can be elegantly written as:
+        p_t = inputs * targets + (1 - inputs) * (1 - targets)
+        # Another way to get p_t from BCE_loss (if BCE_loss = -log(p_t)):
+        # p_t = torch.exp(-BCE_loss)
+        # However, the direct calculation using inputs and targets is more intuitive here.
+        # Step 3: Compute the modulating factor (1 - p_t)^gamma
+        focal_term = (1 - p_t) ** self.gamma
+        # Step 4: Compute alpha term
+        # alpha_t is alpha for positive class (target=1) and (1-alpha) for negative class (target=0)
+        alpha_t = self.alpha * targets + (1 - self.alpha) * (1 - targets)
+        # Step 5: Combine everything
+        loss= alpha_t * focal_term * BCE_loss
+        
+        # Step 6: Apply reduction
+        if self.reduction == 'mean':
+            self.loss_WO_penalty = loss.mean()
+            return self.loss_WO_penalty 
+        elif self.reduction == 'sum':
+            self.loss_WO_penalty = loss.sum()
+            return self.loss_WO_penalty
+        elif self.reduction == 'none':
+            return self.loss_WO_penalty
+        else:
+            raise ValueError("Reduction must be 'none', 'mean', or 'sum'.")
+    def __repr__(self):
+        return (f"loss_type={self.loss_type}, "
+                f"self.alpha={self.alpha}, "
+                f"self.gamma={self.gamma}, "
+                f"self.reduction={self.reduction})")
+    
 class FocalLoss(nn.Module):
     def __init__(self, loss_type="", alpha=8.0, gamma=1.0, regular_type=None, regular_lambda=1e-05):
         super(FocalLoss, self).__init__()

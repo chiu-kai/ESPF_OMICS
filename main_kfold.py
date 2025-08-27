@@ -55,7 +55,7 @@ device = (torch.device('cuda') if torch.cuda.is_available() else torch.device('c
 print(f"Training on device {device}.")
 
 # 檢查exp和AUC的samples是否一致
-if deconfound_EXPembedding is True:
+if DA_Folder != 'None':
     with open(omics_files['Exp'], 'rb') as f:
         latent_dict = pickle.load(f)
         exp_df = pd.DataFrame(latent_dict).T
@@ -73,7 +73,7 @@ set_seed(seed)
 
 scaler_dict = {}  # To store scalers for each omic_type
 for omic_type in include_omics:
-    if deconfound_EXPembedding is True:
+    if DA_Folder != 'None':
         omics_data_dict[omic_type] = exp_df.loc[matched_samples]
     else:
         omics_data_dict[omic_type] = pd.read_csv(omics_files[omic_type], sep=',', index_col=0).loc[matched_samples]
@@ -234,11 +234,11 @@ for fold, (id_unrepeat_train, id_unrepeat_val) in enumerate(kfold.split(id_unrep
     if model_name == "Omics_DrugESPF_Model":
         model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-                            n_layer,deconfound_EXPembedding,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+                            n_layer,DA_Folder,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
     elif model_name == "Omics_DCSA_Model":
         model = Omics_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-                            n_layer,deconfound_EXPembedding,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
+                            n_layer,DA_Folder,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
 
     model.to(device=device)
 
@@ -471,18 +471,18 @@ if model_inference is True:
     if model_name == "Omics_DrugESPF_Model":
         model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-                            n_layer, deconfound_EXPembedding, TCGA_pretrain_weight_path_dict= None)
+                            n_layer, DA_Folder, TCGA_pretrain_weight_path_dict= None)
     elif model_name == "Omics_DCSA_Model":
         model = Omics_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
-                            n_layer, deconfound_EXPembedding, TCGA_pretrain_weight_path_dict= None)
+                            n_layer, DA_Folder, TCGA_pretrain_weight_path_dict= None)
     model.to(device=device)
     model.load_state_dict(BF_best_weight) 
 
     drug_list=["cisplatin", "5-fluorouracil", "gemcitabine", "sorafenib", "temozolomide"]
     drugs_metrics={}
     for drug_name in drug_list:
-        if deconfound_EXPembedding is True:
+        if DA_Folder != 'None':
             with open(f"../data/DAPL/share/pretrain/{DA_Folder}/{cohort}/{drug_name}_latent_results.pkl", 'rb') as f:
                 latent_dict = pickle.load(f)
                 CohortExp_df = pd.DataFrame(latent_dict).T # 32
@@ -495,7 +495,7 @@ if model_inference is True:
         label_df = label_df.sort_index(axis=0).sort_index(axis=1)
         print(f"label_df {drug_name}data",label_df.shape)
         for omic_type in include_omics:
-            if deconfound_EXPembedding is True:
+            if DA_Folder != 'None':
                 omics_data_dict["Exp"] = CohortExp_df
             else:
                 if omic_type == "Exp":

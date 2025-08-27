@@ -9,32 +9,33 @@ class MetricsCalculator_nntorch(nn.Module):
         self.types = types
         self.mse_loss = nn.MSELoss(reduction="mean")
         self.mae_loss = nn.L1Loss(reduction="mean") # reduction (default 'mean')
-    def _find_best_threshold(self, y_true, y_pred, metric="0.5", thresholds=torch.linspace(0.0, 1.0, steps=500)):
-        """
-        Find the best threshold that maximizes the given metric (default: 0.5).
-        Supported metrics: "F1", "Accuracy", "Precision", "Sensitivity"
-        """
-        y_true = y_true.detach()
-        y_pred = y_pred.detach()
-        best_thresh = 0.5
-        best_score = -1.0
-        metric_class = { "F1": torchmetrics.classification.F1Score(task="binary"),
-                         "Accuracy": torchmetrics.classification.Accuracy(task="binary"),
-                         "Precision": torchmetrics.classification.Precision(task="binary"),
-                         "Sensitivity": torchmetrics.classification.Recall(task="binary"),
-                         "Specificity": torchmetrics.classification.Specificity(task="binary")}
-        if metric not in metric_class:
-            return best_thresh
-        else:
-            metric_func = metric_class[metric].to(y_true.device)
-            for thresh in thresholds:
-                pred_bi = (y_pred > thresh).int()
-                GT = (y_true > 0.5).int()  # assuming original labels are probabilities or continuous
-                score = metric_func(pred_bi, GT)
-                if score > best_score:
-                    best_score = score
-                    best_thresh = thresh.item()
-            return best_thresh
+    # def _find_best_threshold(self, y_true, y_pred, metric="0.5", thresholds=torch.linspace(0.0, 1.0, steps=500)):
+    #     """
+    #     Find the best threshold that maximizes the given metric (default: 0.5).
+    #     Supported metrics: "F1", "Accuracy", "Precision", "Sensitivity"
+    #     """
+    #     y_true = y_true.detach()
+    #     y_pred = y_pred.detach()
+    #     best_thresh = 0.5
+    #     best_score = -1.0
+    #     metric_class = { "F1": torchmetrics.classification.F1Score(task="binary"),
+    #                     "Youden": torchmetrics.classification.YoudenIndex(task="binary"),
+    #                      "Accuracy": torchmetrics.classification.Accuracy(task="binary"),
+    #                      "Precision": torchmetrics.classification.Precision(task="binary"),
+    #                      "Sensitivity": torchmetrics.classification.Recall(task="binary"),
+    #                      "Specificity": torchmetrics.classification.Specificity(task="binary")}
+    #     if metric not in metric_class:
+    #         return best_thresh
+    #     else:
+    #         metric_func = metric_class[metric].to(y_true.device)
+    #         for thresh in thresholds:
+    #             pred_bi = (y_pred > thresh).int()
+    #             GT = (y_true > 0.5).int()  # assuming original labels are probabilities or continuous
+    #             score = metric_func(pred_bi, GT)
+    #             if score > best_score:
+    #                 best_score = score
+    #                 best_thresh = thresh.item()
+    #         return best_thresh
         
     def _find_best_threshold_Curve(self, y_true, y_pred, metric="0.5", thresholds=None):
         """
@@ -56,6 +57,12 @@ class MetricsCalculator_nntorch(nn.Module):
             Precision, Sensitivity ,thresholds = torchmetrics.classification.PrecisionRecallCurve(task="binary").to(device)(y_pred, y_true) # to generate many thresholds and corresponsing precision, recall
             F1 = 2 * (Sensitivity * Precision) / (Sensitivity + Precision + 1e-8)
             best_idx = torch.argmax(F1)
+            return thresholds[best_idx]
+        elif metric == "Youden":
+            fpr, Sensitivity ,thresholds  = torchmetrics.classification.ROC(task="binary").to(device)(y_pred, y_true) # to generate many thresholds and corresponsing fpr, tpr
+            Specificity = 1 - fpr
+            Youden = Sensitivity + Specificity - 1
+            best_idx = torch.argmax(Youden)
             return thresholds[best_idx]
         elif metric == "F1_RecSpe":
             fpr, Sensitivity ,thresholds  = torchmetrics.classification.ROC(task="binary").to(device)(y_pred, y_true) # to generate many thresholds and corresponsing fpr, tpr
@@ -112,6 +119,7 @@ class MetricsCalculator_nntorch(nn.Module):
             f1 = torchmetrics.classification.F1Score(task="binary").to(device)(pred_bi, GT)
             sensitivity = torchmetrics.classification.Recall(task="binary").to(device)(pred_bi, GT)
             specificity = torchmetrics.classification.Specificity(task="binary").to(device)(pred_bi, GT)
+            Youden = sensitivity + specificity - 1
             precision = torchmetrics.classification.Precision(task="binary").to(device)(pred_bi, GT)
             F1_RecSpe = 2 * (sensitivity * specificity) / (sensitivity + specificity + 1e-8)
             F1_RecSpePre = 3 * (sensitivity * specificity * precision) / (sensitivity + specificity + precision + 1e-8)
@@ -122,6 +130,7 @@ class MetricsCalculator_nntorch(nn.Module):
                             "Specificity": specificity,
                             "Precision": precision,
                             "F1": f1,
+                            "Youden": Youden,
                             "F1_RecSpe": F1_RecSpe,
                             "F1_RecSpePre": F1_RecSpePre,
                             "Best_Threshold": best_prob_threshold}

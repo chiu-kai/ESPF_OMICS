@@ -9,6 +9,7 @@ import torch
 
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
+from sklearn.manifold import TSNE
 
 def p_to_star(p):
     if p < 0.0001:
@@ -42,7 +43,7 @@ def TCGA_predAUDRC_box_plot_twoClass(drug_name,cohort,df,sensitive,resistant,p_v
     output_file = os.path.join(hyperparameter_folder_path, f'TCGA_{drug_name}_predAUDRC_box_plot_twoClass.png')
     try:
         fig.savefig(output_file)
-        os.chmod(output_file, 0o444)
+#         os.chmod(output_file, 0o444)
     except Exception as e:
         print(f"Error occurred while saving or setting permissions for {output_file}: {str(e)}")
     return plt
@@ -107,9 +108,13 @@ def loss_curve(model_name, train_epoch_loss_list, val_epoch_loss_list, best_epoc
     plt.grid(True)
     # Set y-axis limit
     train_max = max(train_epoch_loss_list)
-    val_max = max(val_epoch_loss_list)
     train_min = min(train_epoch_loss_list)
-    val_min = min(val_epoch_loss_list)
+    if len(val_epoch_loss_list) >0:
+        val_max = max(val_epoch_loss_list)
+        val_min = min(val_epoch_loss_list)
+    else:
+        val_max=train_max
+        val_min=train_min
     if (train_min <= 1.5 < train_max) and (val_min <= 1.5 < val_max):
         plt.ylim(top=1.5, bottom=0)
     else:
@@ -117,7 +122,7 @@ def loss_curve(model_name, train_epoch_loss_list, val_epoch_loss_list, best_epoc
     output_file = os.path.join(hyperparameter_folder_path, f'train_valid_{loss_type}_curve.png')
     try:
         fig.savefig(output_file)
-        os.chmod(output_file, 0o444)
+#         os.chmod(output_file, 0o444)
     except Exception as e:
         print(f"Error occurred while saving or setting permissions for {output_file}: {str(e)}")
     return plt
@@ -188,7 +193,8 @@ def correlation_density(model_name,train_pearson,val_pearson,test_pearson,train_
         if platform.system() == "Windows":
             os.system(f'attrib +r "{output_file}"')
         else:
-            os.chmod(output_file, 0o444)
+            print('os.chmod(output_file, 0o444)')
+#             os.chmod(output_file, 0o444)
     except Exception as e:
         print(f"Error occurred while saving or setting permissions for {output_file}: {str(e)}")
     return plt
@@ -225,7 +231,7 @@ def Density_Plot_of_AUC_Values(datasets,hyperparameter_folder_path=None):
         output_file = os.path.join(hyperparameter_folder_path, 'Density_Plot_of_AUC_Values.png')
         try:
             fig.savefig(output_file)
-            os.chmod(output_file, 0o444)
+#             os.chmod(output_file, 0o444)
             print(f"✅ Set read-only permissions on: {output_file}")
         except Exception as e:
             print(f"⚠️ Failed to set permissions: {e}")
@@ -235,46 +241,50 @@ def Density_Plot_of_AUC_Values(datasets,hyperparameter_folder_path=None):
 def Confusion_Matrix_plot(datasets,hyperparameter_folder_path=None,drug=None):
     plt.rcParams["font.family"] = "serif"
     if len(datasets)==1:
-        fig, ax = plt.subplots(figsize=(8,7))
+        fig, ax = plt.subplots(figsize=(11,11))
         cm, title, color = datasets[0]
-        sns.heatmap(cm, annot=True, fmt='d', annot_kws={"size": 16, "weight": "bold"}, 
+        sns.heatmap(cm, annot=True, fmt='d', annot_kws={"size": 40, "weight": "bold"}, 
                     cmap=color, cbar=False, vmin=0, vmax=max(cm.max() * 1.3, 1), linewidths=0,
-                    xticklabels=["Predicted  0", "Predicted  1"], yticklabels=["Actual  0", "Actual  1"], ax=ax)
+                    xticklabels=["0", "1"], yticklabels=["0", "1"], ax=ax) # xticklabels=["Predicted  0", "Predicted  1"], yticklabels=["Actual  0", "Actual  1"]
         if drug is not None:
-            ax.set_title(f'{drug} {title} samples',fontsize=16, fontweight='bold')
+            ax.set_title(f'{drug}-{title} samples',fontsize=32, fontweight='bold')
         else:
-            ax.set_title(f'{title} samples',fontsize=16, fontweight='bold')
+            ax.set_title(f'{title} samples',fontsize=32, fontweight='bold')
         for spine in ax.spines.values():
             spine.set_visible(True)
             spine.set_linewidth(0.8)
             spine.set_edgecolor('black')
         # Make x and y tick labels bold
-        ax.tick_params(axis='x', labelsize=12, labelrotation=0)
-        ax.tick_params(axis='y', labelsize=12, labelrotation=0)
+        ax.tick_params(axis='x', labelsize=45, labelrotation=0)
+        ax.tick_params(axis='y', labelsize=45, labelrotation=0)
+        ax.set_xlabel("Predicted", fontsize=45, fontweight='bold', fontname="serif")
+        ax.set_ylabel("Actual", fontsize=45, fontweight='bold', fontname="serif")
         for label in ax.get_xticklabels() + ax.get_yticklabels():
             label.set_fontweight('bold')
         if hyperparameter_folder_path is not None:
-            output_file = os.path.join(hyperparameter_folder_path, f'{drug} Confusion_Matrix.png')
+            output_file = os.path.join(hyperparameter_folder_path, f'{drug}-{title} Confusion_Matrix.png')
             try:
                 fig.savefig(output_file)
-                os.chmod(output_file, 0o444)
+#                 os.chmod(output_file, 0o444)
                 print(f"✅ Set read-only permissions on: {output_file}")
             except Exception as e:
                 print(f"⚠️ Failed to set permissions: {e}")
     else:
-        fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+        fig, axs = plt.subplots(1, 3, figsize=(13, 5))
         for i, (cm, title, color) in enumerate(datasets):
             sns.heatmap(cm, annot=True, fmt='d', annot_kws={"size": 16, "weight": "bold"}, 
                         cmap=color, cbar=False, vmin=0, vmax=max(cm.max() * 1.3, 1), linewidths=0,
-                        xticklabels=["Predicted  0", "Predicted  1"], yticklabels=["Actual  0", "Actual  1"], ax=axs[i])
+                        xticklabels=["0", "1"], yticklabels=["0", "1"], ax=axs[i])# xticklabels=["Predicted  0", "Predicted  1"], yticklabels=["Actual  0", "Actual  1"]
             axs[i].set_title(f'{title} Set',fontsize=16, fontweight='bold')
             for spine in axs[i].spines.values():
                 spine.set_visible(True)
                 spine.set_linewidth(0.8)
                 spine.set_edgecolor('black')
             # Make x and y tick labels bold
-            axs[i].tick_params(axis='x', labelsize=12, labelrotation=0)
-            axs[i].tick_params(axis='y', labelsize=12, labelrotation=0)
+            axs[i].tick_params(axis='x', labelsize=13, labelrotation=0)
+            axs[i].tick_params(axis='y', labelsize=13, labelrotation=0)
+            axs[i].set_xlabel("Predicted", fontsize=18, fontweight='bold', fontname="serif")
+            axs[i].set_ylabel("Actual", fontsize=18, fontweight='bold', fontname="serif")
             for label in axs[i].get_xticklabels() + axs[i].get_yticklabels():
                 label.set_fontweight('bold')
         # Set a global title and save the figure
@@ -284,13 +294,72 @@ def Confusion_Matrix_plot(datasets,hyperparameter_folder_path=None,drug=None):
             output_file = os.path.join(hyperparameter_folder_path, 'Confusion_Matrix.png')
             try:
                 fig.savefig(output_file)
-                os.chmod(output_file, 0o444)
+#                 os.chmod(output_file, 0o444)
                 print(f"✅ Set read-only permissions on: {output_file}")
             except Exception as e:
                 print(f"⚠️ Failed to set permissions: {e}")
     return plt
 
+def tSNE_embed_plot(datasets,hyperparameter_folder_path=None,drug=None):
+    plt.rcParams["font.family"] = "serif"
+    if len(datasets)==1:
+        fig, ax = plt.subplots(figsize=(6,6))
+        tSNE_embed_list, eval_targets, title, color = datasets[0]
+        features_np = np.concatenate(tSNE_embed_list, axis=0)
+        labels_np = torch.concatenate(eval_targets).detach().cpu().numpy()
+        print(f"tSNE Embed shape: {features_np.shape}, Labels shape: {labels_np.shape}")
+        # 使用 t-SNE 做降維
+        tsne = TSNE(n_components=2, random_state=42, perplexity=len(features_np)//3, n_iter=1000)
+        features_2d = tsne.fit_transform(features_np)
+        sns.scatterplot( x=features_2d[:, 0], y=features_2d[:, 1], hue=labels_np, palette='Set2', s=60, alpha=0.8, ax=ax )
+        ax.set_title("t-SNE of Embedding Features", fontsize=16, fontweight="bold")
+        ax.set_xlabel("t-SNE 1", fontsize=16, fontweight="bold")
+        ax.set_ylabel("t-SNE 2", fontsize=16, fontweight="bold")
+        leg = ax.legend(title="Label", fontsize=13, title_fontsize=14)
+        plt.setp(leg.get_title(), weight='bold')
+        fig.tight_layout()
+        if hyperparameter_folder_path is not None:
+            output_file = os.path.join(hyperparameter_folder_path, f'{drug}-{title} tSNE_Embedding.png')
+            try:
+                fig.savefig(output_file)
+#                 os.chmod(output_file, 0o444)
+                print(f"✅ Set read-only permissions on: {output_file}")
+            except Exception as e:
+                print(f"⚠️ Failed to set permissions: {e}")
+    else:
+        fig, axs = plt.subplots(1, 3, figsize=(13, 5))
+        for i, (tSNE_embed_list, eval_targets, title, color) in enumerate(datasets):
+            features_np = np.concatenate(tSNE_embed_list, axis=0)
+            labels_np = torch.concatenate(eval_targets).detach().cpu().numpy()
+            print(f"tSNE Embed shape: {features_np.shape}, Labels shape: {labels_np.shape}")
+            # 使用 t-SNE 做降維
+            tsne = TSNE(n_components=2, random_state=42, perplexity=30, n_iter=1000)
+            features_2d = tsne.fit_transform(features_np)
+            # 在 axs[i] 上畫圖
+            sns.scatterplot(
+                x=features_2d[:, 0], y=features_2d[:, 1],
+                hue=labels_np, palette='Set2', s=60, alpha=0.8,
+                ax=axs[i]            )
+            axs[i].set_title(f'{title} Set', fontsize=16, fontweight='bold')
+            axs[i].set_xlabel("t-SNE 1", fontsize=16, fontweight="bold")
+            axs[i].set_ylabel("t-SNE 2", fontsize=16, fontweight="bold")
 
+            # Legend 處理
+            leg = axs[i].legend(title="Label", fontsize=13, title_fontsize=14)
+            plt.setp(leg.get_title(), weight='bold')
+
+        # Set a global title and save the figure
+        fig.suptitle('tSNE Embedding for Train, Val, and Test Sets', fontsize=20, fontweight='bold')
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        if hyperparameter_folder_path is not None:
+            output_file = os.path.join(hyperparameter_folder_path, 'tSNE_Embedding.png')
+            try:
+                fig.savefig(output_file)
+#                 os.chmod(output_file, 0o444)
+                print(f"✅ Set read-only permissions on: {output_file}")
+            except Exception as e:
+                print(f"⚠️ Failed to set permissions: {e}")
+    return plt
 
 
 # plot predicted AUC value for every sample by drug label 

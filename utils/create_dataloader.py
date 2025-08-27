@@ -27,7 +27,7 @@ class InstanceResponseDataset(torch.utils.data.Dataset):
                 # print("expr", expr.shape)
                 self.expr_dict[omic_type][sample_id] = torch.tensor(expr, dtype=torch.float32).to(self.device)
         # 預先計算每個藥物的 graph，存入 dict
-        self.drug_graph_dict = {}
+        self.drug_dict = {}
         for drug_id in self.drug_smiles_df.index:
             if drug_graph is True:
                 drug_smile = self.drug_smiles_df.loc[drug_id]['SMILES']
@@ -35,10 +35,10 @@ class InstanceResponseDataset(torch.utils.data.Dataset):
                 drug_x = torch.tensor(np.array(atom_features_list), dtype=torch.float32)
                 drug_edge_index = torch.tensor(edge_index, dtype=torch.long).t().contiguous()
                 drug_data = Data(x=drug_x, edge_index=drug_edge_index)
-                self.drug_graph_dict[drug_id] = drug_data.to(self.device)
+                self.drug_dict[drug_id] = drug_data.to(self.device)
             else:
                 drug_encode = self.drug_smiles_df.loc[drug_id]["drug_encode"]
-                self.drug_graph_dict[drug_id] = torch.tensor(np.array(drug_encode), dtype=torch.long).to(self.device)
+                self.drug_dict[drug_id] = torch.tensor(np.array(drug_encode), dtype=torch.long).to(self.device)
     def __len__(self):
         return len(self.response_df)
     def __getitem__(self, idx):
@@ -51,7 +51,7 @@ class InstanceResponseDataset(torch.utils.data.Dataset):
                              for omic_type in self.include_omics}
         # gene_feature = self.expr_dict[sample_id]
         # 從預先計算好的字典中取出對應的藥物 graph
-        drug_data = self.drug_graph_dict[drug_id]
+        drug_data = self.drug_dict[drug_id]
         target = torch.tensor(target, dtype=torch.float32).to(self.device)
         return gene_feature, drug_data, target
 
