@@ -42,6 +42,11 @@ utils/load_data_tensor.py
 utils/freeCmax threshols.ipynb
 utils/train(PDAC).py
 utils/nn.transformer.py
+utils/PDAC_Train_byCCL_mut_drug_1fold_package copy 3.ipynb
+utils/kmeans_binary_label.py
+utils/convert_PRISM_secondary_AUC_matrix_to_instance.ipynb
+utils/Smiles2MACCS.py
+utils/AttentionPooling.py
 inference.ipynb
 GDSC_inference.ipynb
 Show_Results.ipynb
