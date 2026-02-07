@@ -26,7 +26,7 @@ from scipy.stats import ttest_ind
 import time
 
 from utils.ESPF_drug2emb import drug2emb_encoder
-from utils.Model import Omics_DrugESPF_Model, Omics_DCSA_Model#, GIN_DCSA_model
+from utils.Model import Omics_DrugESPF_Model, Omics_DCSA_Model, GIN_DCSA_model
 from utils.split_data_id import split_id,repeat_func
 from utils.create_dataloader import OmicsDrugDataset,InstanceResponseDataset
 from utils.train import train, evaluation
@@ -100,6 +100,7 @@ if "BRD_ID" in drug_df.columns:
 print("drug_df",drug_df.shape)
 if one_drug is not None:
     AUC_df_numerical = AUC_df_numerical[AUC_df_numerical['drug_name'].str.lower() == one_drug.lower()]# matched AUCfile and drug samples
+
 # matched AUCfile and omics_data samples
 AUC_df_numerical = AUC_df_numerical[AUC_df_numerical['ModelID'].isin(matched_samples)]
 print("AUC_df_numerical match samples",AUC_df_numerical.shape)
@@ -232,10 +233,10 @@ for fold, (train_idx, val_idx) in enumerate(split_generator):
         model = Omics_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
                             n_layer,DA_Folder,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
-#     elif model_name == "GIN_DCSA_model":
-#         model = GIN_DCSA_model(omics_encode_dim_dict, activation_func,activation_func_final,dense_layer_dim, device,
-#                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, 
-#                             n_layer, DA_Folder,TCGA_pretrain_weight_path_dict=TCGA_pretrain_weight_path_dict)
+    elif model_name == "GIN_DCSA_model":
+        model = GIN_DCSA_model(omics_encode_dim_dict, activation_func,activation_func_final,dense_layer_dim, device,
+                            drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, 
+                            n_layer, DA_Folder,TCGA_pretrain_weight_path_dict=TCGA_pretrain_weight_path_dict)
 
     model.to(device=device)
 
@@ -462,6 +463,8 @@ with open(output_file, "w") as file:
     os.chmod(output_file, 0o444)
 
     
+    
+    
 if model_inference is True:
     set_seed(seed)
     if model_name == "Omics_DrugESPF_Model":
@@ -472,14 +475,137 @@ if model_inference is True:
         model = Omics_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
                             n_layer, DA_Folder, TCGA_pretrain_weight_path_dict= None)
-#     elif model_name == "GIN_DCSA_model":
-#         model = GIN_DCSA_model(omics_encode_dim_dict, activation_func,activation_func_final,dense_layer_dim, device,
-#                             drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, 
-#                             n_layer, DA_Folder,TCGA_pretrain_weight_path_dict=None)
+    elif model_name == "GIN_DCSA_model":
+        model = GIN_DCSA_model(omics_encode_dim_dict, activation_func,activation_func_final,dense_layer_dim, device,
+                            drug_embedding_feature_size, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, 
+                            n_layer, DA_Folder,TCGA_pretrain_weight_path_dict=None)
 
     model.to(device=device)
     model.load_state_dict(BF_best_weight) 
+    
+# DiSyn TCGA data inference
+    paper = 'DiSyn'# 'DeepCDR' DiSyn
+    label_df_pth = f"../data/TCGA/DiSyn TCGA drug response match exp file samples.csv" # TCGA DeepCDR samples.csv DiSyn TCGA drug response match exp file samples.csv
+    TCGA_EXP_pth = f"../data/TCGA/TCGA DiSyn samples EXP1426.csv"# TCGA DeepCDR samples EXP1426.csv TCGA DiSyn samples EXP1426.csv
+    
+    if DA_Folder != 'None':
+        with open(f"../data/DAPL/share/pretrain/{DA_Folder}/tcga_latent_results.pkl", 'rb') as f:
+            latent_dict = pickle.load(f)
+            CohortExp_df = pd.DataFrame(latent_dict).T # 32
+    else:
+        CohortExp_df = pd.read_csv(TCGA_EXP_pth, sep=',', index_col=0) #1426
+        
+    label_df = pd.read_csv(label_df_pth, sep=',')
+    label_df.columns.values[0] = 'ModelID'
+    label_df['drug_name'] = label_df['drug_name'].str.lower() # match the drug name in drug_df
+    CohortExp_df = CohortExp_df.sort_index(axis=0).sort_index(axis=1)
+    print(f"{cohort}exp data",CohortExp_df.shape)
+    label_df = label_df.sort_index(axis=0).sort_index(axis=1)
+    print(f"label_df data",label_df.shape)
+    
+    for omic_type in include_omics:
+        if DA_Folder != 'None':
+            omics_data_dict["Exp"] = CohortExp_df
+        else:
+            if omic_type == "Exp":
+                scaler = scaler_dict[omic_type]
+                omics_data_dict[omic_type] = pd.DataFrame(scaler.transform(CohortExp_df),index=CohortExp_df.index,columns=CohortExp_df.columns) # use fitted CCLE scaler to transform TCGA data
+        # omics_data_tensor_dict[omic_type]  = torch.tensor(omics_data_dict[omic_type].values, dtype=torch.float32).to(device)
+        omics_numfeatures_dict[omic_type] = omics_data_dict[omic_type].shape[1]
+        # print(f"{omic_type} tensor shape:", omics_data_tensor_dict[omic_type].shape)
+        print(f"{omic_type} num_features",omics_numfeatures_dict[omic_type])
 
+    drug_df = pd.read_csv( drug_df_path, sep=',') # "../data/GDSC/GDSC_drug_merge_pubchem_dropNA_MACCS.csv"
+    drug_df['name'] = drug_df['name'].str.lower()
+    drug_df = drug_df.set_index('name', drop=False)
+    print(drug_df.shape)            
+        
+    if ESPF is True:
+        # 挑出重複的SMILES
+        duplicate =  drug_df["SMILES"][drug_df["SMILES"].duplicated(keep=False)]
+        vocab_path = "./ESPF/drug_codes_chembl_freq_1500.txt" # token
+        sub_csv = pd.read_csv(ESPF_file)# token with frequency
+        # 將drug_smiles 使用_drug2emb_encoder function編碼成subword vector
+        drug_df["drug_encode"] = pd.Series(drug_df["SMILES"]).apply(drug2emb_encoder, args=(vocab_path, sub_csv, max_drug_len))
+#             print("drug_encode",type(drug_df["drug_encode"]))
+        drug_df["drug_encode"] = [i[:2] for i in drug_df["drug_encode"].values]
+    else:
+        drug_df["drug_encode"]=[list(map(int, item.split(','))) for item in drug_df["MACCS166bits"].values]
+    #--------------------------------------------------------------------------------------------------------------------------
+    num_ccl = list(omics_data_dict.values())[0].shape[0]
+    num_drug = drug_df["drug_encode"].shape[0]
+    print("num_ccl,num_drug: ",num_ccl,num_drug)
+# Fc1c[nH]c(=O)[nH]c1=O 
+    set_seed(seed)
+    dataset = InstanceResponseDataset(label_df, omics_data_dict, drug_df, drug_graph, include_omics, device)
+    whole_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
+    # eval_targets, eval_outputs,predAUCwithUnknownGT, AttenScorMat_DrugSelf, AttenScorMat_DrugCellSelf,eval_outputs_before_final_activation_list, mean_batch_eval_lossWOpenalty
+    (eval_targets, eval_outputs,predAUCwithUnknownGT,
+    AttenScorMat_DrugSelf ,AttenScorMat_DrugCellSelf,
+    eval_outputs_before_final_activation_list,   tSNE_embed_list,
+    mean_batch_eval_loss_WO_penalty)  = evaluation(model, None,None,
+                                                criterion, whole_loader, device,ESPF,Drug_SelfAttention, 
+                                                weighted_threshold, few_weight, more_weight, 
+                                                outputcontrol='inference')
+    # Calculate classification metrics  
+    drugs_metrics={}
+    drug_name = paper
+    
+    drugs_metrics[drug_name], _  = metrics_calculator(torch.cat(eval_targets), torch.cat(eval_outputs), best_prob_threshold, metric, dataset="test")
+    drugs_metrics[drug_name]["eval_targets"]=eval_targets
+    drugs_metrics[drug_name]["eval_outputs"]=eval_outputs
+    drugs_metrics[drug_name]["eval_outputs_before_final_activation_list"]=eval_outputs_before_final_activation_list
+    drugs_metrics[drug_name][criterion.loss_type] = mean_batch_eval_loss_WO_penalty
+
+    if 'BCE' in criterion.loss_type :
+        (test_cm ,  test_GT_0_count, test_GT_1_count, 
+        test_pred_binary_0_count, test_pred_binary_1_count ) =metrics_calculator.confusion_matrix(torch.cat(eval_targets), torch.cat(eval_outputs), best_prob_threshold)
+        drugs_metrics[drug_name]["CM"] = test_cm
+        # # plot confusion matrix
+        cm_datas = [(test_cm, cohort, 'Blues')]
+        Confusion_Matrix_plot(cm_datas,hyperparameter_folder_path=best_weight_path,drug=drug_name)
+#         tSNE_embed_datas = [(tSNE_embed_list,eval_targets, cohort, 'Blues')]
+#         tSNE_embed_plot(tSNE_embed_datas,hyperparameter_folder_path=best_weight_path,drug=drug_name)
+
+    else:#regression use prob_threshold to get binary outcome
+        df = pd.DataFrame({'predicted AUDRC': torch.cat(eval_outputs).cpu().numpy(),
+                'Label': torch.cat(eval_targets).cpu().numpy()})
+        # Perform t-test between the two groups
+        sensitive = df[df['Label'] == 1]['predicted AUDRC']
+        resistant = df[df['Label'] == 0]['predicted AUDRC']
+        t_stat, p_val = ttest_ind(sensitive, resistant)
+        drugs_metrics[drug_name]["pvalue"]= p_val
+        if p_val<=0.05:
+            TCGA_predAUDRC_box_plot_twoClass(drug_name,cohort,df,sensitive,resistant,p_val,best_weight_path)
+output_file = f"{best_weight_path}/{paper}_BF{BF}_{cohort}_inference_result.txt"
+with open(output_file, "w") as file:
+    if 'BCE' in criterion.loss_type :
+        for drug_name, metrics in drugs_metrics.items():
+            file.write(f"\n{drug_name}\n")
+            file.write(f"BF_best_prob_threshold: {best_prob_threshold} according to {metric}\n")
+            file.write(f"  test {criterion.loss_type}loss: {metrics[criterion.loss_type].item():.6f}\n")
+            for key in metrics_type_set:
+                file.write(f"  '{key}': {metrics[key].item():.4f}\n")
+            for key in ["eval_targets","eval_outputs_before_final_activation_list","eval_outputs"]:
+                file.write(f"\n{key}\n{metrics[key][0][:20]}\n\n")
+    else:
+        for drug_name, metrics in drugs_metrics.items():
+            file.write(f"{drug_name}\n")
+            file.write(f"  test {criterion.loss_type}loss: {metrics[criterion.loss_type].item():.6f}\n")
+            if metrics['pvalue'].item() <= 0.05:
+                file.write(f"\n pvalue <= 0.05 ")
+            else:
+                file.write(f"\n pvalue > 0.05 ")
+            file.write(f"{drug_name} pvalue: {metrics['pvalue'].item():.4f}\n\n")
+            for key in ["eval_targets","eval_outputs_before_final_activation_list","eval_outputs"]:
+                file.write(f"\n{key}\n{metrics[key][0][:20]}\n")       
+    os.chmod(output_file, 0o444)# Read-only
+    del model
+    torch.cuda.set_device("cuda:0")# Set the current device
+    gc.collect()# Optionally, force garbage collection to release memory 
+    torch.cuda.empty_cache() # Empty PyTorch cache
+'''
+    # CODEAE TCGA data inference
     drug_list=["cisplatin", "5-fluorouracil", "gemcitabine", "sorafenib", "temozolomide"]
     drugs_metrics={}
     for drug_name in drug_list:
@@ -525,7 +651,7 @@ if model_inference is True:
             duplicate =  drug_df["SMILES"][drug_df["SMILES"].duplicated(keep=False)]
             #ESPF
             vocab_path = "./ESPF/drug_codes_chembl_freq_1500.txt" # token
-            sub_csv = pd.read_csv("./ESPF/subword_units_map_chembl_freq_1500.csv")# token with frequency
+            sub_csv = pd.read_csv(ESPF_file)# token with frequency
             # 將drug_smiles 使用_drug2emb_encoder function編碼成subword vector
             drug_df["drug_encode"] = pd.Series(drug_df["SMILES"]).apply(drug2emb_encoder, args=(vocab_path, sub_csv, max_drug_len))
 #             print("drug_encode",type(drug_df["drug_encode"]))
@@ -611,3 +737,4 @@ if model_inference is True:
     torch.cuda.set_device("cuda:0")# Set the current device
     gc.collect()# Optionally, force garbage collection to release memory 
     torch.cuda.empty_cache() # Empty PyTorch cache
+'''

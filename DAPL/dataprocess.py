@@ -166,7 +166,7 @@ def smile_to_graph(smile):
     edges = []
     for bond in mol.GetBonds():
         edges.append([bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()])#收集所有邊的 index 對（原子對）
-    g = nx.Graph(edges).to_directed() # 建立無向圖，再轉為雙向圖（即一條鍵變為兩條有方向的邊） # DiGraph with nodes and edges
+    g = nx.Graph(edges).to_directed() # 建立無向圖，再轉為雙向圖（即一條鍵變為兩條有方向的邊） # DiGraph with nodes and edges，edges*2
     edge_index = [ ]# [num_edges, 2] 
     for e1, e2 in g.edges:
         edge_index.append([e1, e2])

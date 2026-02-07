@@ -31,20 +31,21 @@ class InstanceResponseDataset(torch.utils.data.Dataset):
         for drug_id in self.drug_smiles_df.index:
             if drug_graph is True:
                 drug_smile = self.drug_smiles_df.loc[drug_id]['SMILES']
-                c_size, atom_features_list, edge_index = smile_to_graph(drug_smile)
+                c_size, atom_features_list, edge_index = smile_to_graph(drug_smile)# np.shape(edge_index)(54, 2)54個連線
                 drug_x = torch.tensor(np.array(atom_features_list), dtype=torch.float32)
-                drug_edge_index = torch.tensor(edge_index, dtype=torch.long).t().contiguous()
+                drug_edge_index = torch.tensor(edge_index, dtype=torch.long).t().contiguous()# torch.Size([2, 54])
                 drug_data = Data(x=drug_x, edge_index=drug_edge_index)
-                self.drug_dict[drug_id] = drug_data.to(self.device)
+                self.drug_graph_dict[drug_id.lower()] = drug_data.to(self.device)
             else:
                 drug_encode = self.drug_smiles_df.loc[drug_id]["drug_encode"]
-                self.drug_dict[drug_id] = torch.tensor(np.array(drug_encode), dtype=torch.long).to(self.device)
+                self.drug_graph_dict[drug_id.lower()] = torch.tensor(np.array(drug_encode), dtype=torch.long).to(self.device)
+
     def __len__(self):
         return len(self.response_df)
     def __getitem__(self, idx):
         row = self.response_df.iloc[idx]
         sample_id = row['ModelID']
-        drug_id = row['drug_name']
+        drug_id = row['drug_name'].lower()
         target = float(row['Label'])
         # 從查表字典中直接取得 gene features
         gene_feature = {omic_type: self.expr_dict[omic_type][sample_id]

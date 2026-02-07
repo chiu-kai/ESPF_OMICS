@@ -42,7 +42,7 @@ class GINConvNet(torch.nn.Module):
         #                  Data(x=[21, 78], edge_index=[2, 46])]
         # drug_batch DataBatch(x=[62, 78], edge_index=[2, 134], batch=[62], ptr=[3])
         x, edge_index = data.x, data.edge_index 
-        #data.x shape: torch.Size([62, 78]); 
+        # data.x shape: torch.Size([62, 78]); 
         # data.edge_index shape: torch.Size([2, 134]); 
         # data.batch shape: torch.Size([62])
         x = self.relu(self.conv1(x, edge_index))
