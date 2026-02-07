@@ -19,6 +19,12 @@ weight.tar
 saved_models/
 drug_graph.ipynb
 utils\find_common_CCLEsample_for_PRISMtest.ipynb
+Show_Results.ipynb
+utils/response value inspecting.ipynb
+inference2server.ipynb
+LeaveOut_cancerType_inference.ipynb
+utils/MACCS.ipynb
+utils/data_preprocessing.ipynb
 
 # Ignore all config files
 utils/config*.py
@@ -55,7 +61,3 @@ utils/Smiles2MACCS.py
 utils/AttentionPooling.py
 inference.ipynb
 GDSC_inference.ipynb
-Show_Results.ipynb
-utils/response value inspecting.ipynb
-inference2server.ipynb
-LeaveOut_cancerType_inference.ipynb
