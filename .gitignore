@@ -56,3 +56,6 @@ utils/AttentionPooling.py
 inference.ipynb
 GDSC_inference.ipynb
 Show_Results.ipynb
+utils/response value inspecting.ipynb
+inference2server.ipynb
+LeaveOut_cancerType_inference.ipynb
