@@ -35,10 +35,10 @@ class InstanceResponseDataset(torch.utils.data.Dataset):
                 drug_x = torch.tensor(np.array(atom_features_list), dtype=torch.float32)
                 drug_edge_index = torch.tensor(edge_index, dtype=torch.long).t().contiguous()# torch.Size([2, 54])
                 drug_data = Data(x=drug_x, edge_index=drug_edge_index)
-                self.drug_graph_dict[drug_id.lower()] = drug_data.to(self.device)
+                self.drug_dict[drug_id.lower()] = drug_data.to(self.device)
             else:
                 drug_encode = self.drug_smiles_df.loc[drug_id]["drug_encode"]
-                self.drug_graph_dict[drug_id.lower()] = torch.tensor(np.array(drug_encode), dtype=torch.long).to(self.device)
+                self.drug_dict[drug_id.lower()] = torch.tensor(np.array(drug_encode), dtype=torch.long).to(self.device)
 
     def __len__(self):
         return len(self.response_df)

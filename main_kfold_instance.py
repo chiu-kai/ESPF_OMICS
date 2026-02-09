@@ -489,9 +489,7 @@ if model_inference is True:
     TCGA_EXP_pth = f"../data/TCGA/TCGA DiSyn samples EXP1426.csv"# TCGA DeepCDR samples EXP1426.csv TCGA DiSyn samples EXP1426.csv
     
     if DA_Folder != 'None':
-        with open(f"../data/DAPL/share/pretrain/{DA_Folder}/tcga_latent_results.pkl", 'rb') as f:
-            latent_dict = pickle.load(f)
-            CohortExp_df = pd.DataFrame(latent_dict).T # 32
+        CohortExp_df = pd.read_csv(f"../data/DAPL/share/pretrain/{DA_Folder}/tcga_latent_results_{paper}_rmdup.csv", sep=',', index_col=0)
     else:
         CohortExp_df = pd.read_csv(TCGA_EXP_pth, sep=',', index_col=0) #1426
         

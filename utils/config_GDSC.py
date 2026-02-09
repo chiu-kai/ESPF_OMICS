@@ -12,12 +12,13 @@ if model_inference is True:
     geneNUM = "" # _4692genes tcgadata tcgalabel tcgadata_4692genes tcgalabel_4692genes
 
 test = False #False, True: batch_size = 3, num_epoch = 2, full dataset
+
 drug_df_path= "../data/GDSC/GDSC_drug_merge_pubchem_dropNA_MACCS.csv"
 one_drug=None # gsk690693 trametinib erlotinib
-ESPF_file = "./ESPF/subword_units_map_chembl_freq_1500.csv"
-AUC_df_path_numerical = "../data/GDSC/lorio GDSC1 by whole balanced_high LNic50 downsample 17088 CCL552drug238cancerType18 stack.csv" # gdsc1+2_ccle_z-score　gdsc1+2_ccle_AUC
-AUC_df_path = "../data/GDSC/lorio GDSC1 by whole balanced_high LNic50 downsample 17088 CCL552drug238cancerType18 stack.csv"
-response_file = 'down_high'# down/up/imbalanced _ high/even/low
+ESPF_file = "./ESPF/(NAN) subword_units_map_chembl_freq_1500.csv" #(NAN) subword_units_map_chembl_freq_1500.csv
+AUC_df_path_numerical = "../data/GDSC/GDSC2_fitted_dose_response_27Oct23 from GDSC MaxScreen threshold ModelID678 drug230 samples142188 balanced_high.csv" # gdsc1+2_ccle_z-score　gdsc1+2_ccle_AUC
+AUC_df_path = "../data/GDSC/GDSC2_fitted_dose_response_27Oct23 from GDSC MaxScreen threshold ModelID678 drug230 samples142188 balanced_high.csv"
+response_file = 'down_high'# down/up _ high/even/low 、imbalanced
 omics_files = {
     'Mut': "",
     'Exp': "../data/DAPL/share/ccle_uq1000_feature_sorted.csv", # "../data/CCLE/CCLE_exp_476samples_4692genes.txt",
@@ -30,7 +31,8 @@ omics_numfeatures_dict = {}
 omics_encode_dim_dict ={'Mut':[128,32],'Exp':[128,32],  # Dr.Chiu:exp[500,200,50]  [1000,100,50] 'Mut':[128,32],'Exp':[128,32], 'Mut':[1000,100,50],'Exp':[1000,100,50],
                         'CN':[100,50,30], 'Eff':[100,50,30], 'Dep':[100,50,30], 'Met':[100,50,30]}
 
-TCGA_pretrain_weight_path_dict = None#{'Mut': "./results/Encoder_tcga_mut_1000_100_50_best_loss_0.0066.pt",
+# TCGA pretrain weight load or not 
+TCGA_pretrain_weight_path_dict = None #{'Mut': "./results/Encoder_tcga_mut_1000_100_50_best_loss_0.0066.pt",
                                   #'Exp': "./results/Encoder_tcga_exp_128_32_best_loss_0.2182988.pt", # "./results/Encoder_tcga_exp_128_32_best_loss_0.2182988.pt", "./results/Encoder_tcga_exp_1000_100_50_best_loss_0.7.pt"
                                   # Add more omics types and paths as needed
                               # }
@@ -38,29 +40,34 @@ seed = 42
 
 model_name = "Omics_DrugESPF_Model" # Omics_DrugESPF_Model  Omics_DCSA_Model
 AUCtransform = None #"-log2"
-# splitType= 'byCCL' # byCCL byDrug 
-splitType= 'whole' # ModelID or drug_name or whole
-response = "lnIC50"
+# samples splitType= 'byCCL' # byCCL byDrug 
+splitType= 'ModelID' # ModelID or drug_name or whole
+response = "lnIC50" # 
+
 #------------------graph-------------
 drug_graph = False # False True
 drug_graph_pool = "add"
 DCSA = False # False True # Drug_Cell_SelfAttention
 drug_pretrain_weight_path = '../data/DAPL/share/pretrain/drug_encoder.pth' 
+DrugGraph_pretrainDim = 10
 #------------------------------------
+
 kfoldCV = 5
 include_omics = ['Exp']
-DA_Folder = "VAEwC_1" # None VAE_w10SC VAEwC_1
+DA_Folder = "VAE_w10SC" # None  VAEwC_1  VAE_w10SC  VAE_w5SC  VAE_gFID  VAE_0  VAE
 if DA_Folder != 'None':
     omics_files['Exp'] = f"../data/DAPL/share/pretrain/{DA_Folder}/ccle_latent_results.pkl" #
+
 max_drug_len=50 # 不夠補零補到50 / 超過取前50個subwords(index) !!!!須改方法!!!! 
 drug_embedding_feature_size = 128 # graph:32; ESPF: 128
+
 ESPF = False # False True
 Drug_SelfAttention = False
-n_layer = 1 # transformer layer number
+n_layer = 1 # transformer layer number # control both Drug_SelfAttention and DCSA
 pos_emb_type = 'sinusoidal' # 'learned' 'sinusoidal'
 #需再修改-----------
 
-intermediate_size =256 # graph:64; ESPF: 256 
+intermediate_size = drug_embedding_feature_size*2 # graph:64; ESPF: 256 
 num_attention_heads = 8      
 attention_probs_dropout_prob = 0.1
 hidden_dropout_prob = 0.1
