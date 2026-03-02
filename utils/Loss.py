@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class BCE_FocalLoss(nn.Module):
-    def __init__(self, loss_type="BCE_Focal", alpha=0.25, gamma=2.0, reduction='mean'):
+    def __init__(self, loss_type="BCE_Focal", alpha=0.75, gamma=2.0, reduction='mean', regular_type=None, regular_lambda=0.001):
         """
         Initializes the FocalLoss module for inputs that are already probabilities (after sigmoid).
         Args:
@@ -13,12 +13,19 @@ class BCE_FocalLoss(nn.Module):
             gamma (float): Focusing parameter. Higher gamma reduces the loss for easy examples.
             reduction (str): Specifies the reduction to apply to the output:
                              'none' | 'mean' | 'sum'. 'mean' is the default.
+            loss_type (str): The type of loss to use ("RMSE", "MSE", "MAE", "MAE+MSE", "MAE+RMSE").
+            regular_type (str): The type of regularization to use ("L1", "L2", "L1+L2"), or None for no regularization.
+            regular_lambda (float): The lambda weight for regularization.
         """
         super().__init__()
         self.loss_type = loss_type
         self.alpha = alpha
         self.gamma = gamma
         self.reduction = reduction
+
+        self.regular_type = regular_type
+        self.regular_lambda = regular_lambda
+        self.penalty_value = None
     def forward(self, inputs, targets, model=None, weights=None):
         """
         Args:
@@ -44,30 +51,46 @@ class BCE_FocalLoss(nn.Module):
         # Another way to get p_t from BCE_loss (if BCE_loss = -log(p_t)):
         # p_t = torch.exp(-BCE_loss)
         # However, the direct calculation using inputs and targets is more intuitive here.
-        # Step 3: Compute the modulating factor (1 - p_t)^gamma
-        focal_term = (1 - p_t) ** self.gamma
-        # Step 4: Compute alpha term
+        # Step 3: Compute alpha term
         # alpha_t is alpha for positive class (target=1) and (1-alpha) for negative class (target=0)
         alpha_t = self.alpha * targets + (1 - self.alpha) * (1 - targets)
-        # Step 5: Combine everything
-        loss= alpha_t * focal_term * BCE_loss
+        # Step 4: Combine everything
+        self.loss_WO_penalty= alpha_t * (1 - p_t) ** self.gamma * BCE_loss
         
-        # Step 6: Apply reduction
+        # Step 5: Apply reduction
         if self.reduction == 'mean':
-            self.loss_WO_penalty = loss.mean()
-            return self.loss_WO_penalty 
+            self.loss_WO_penalty = self.loss_WO_penalty.mean()
         elif self.reduction == 'sum':
-            self.loss_WO_penalty = loss.sum()
-            return self.loss_WO_penalty
+            self.loss_WO_penalty = self.loss_WO_penalty.sum()
         elif self.reduction == 'none':
-            return self.loss_WO_penalty
+            pass  # 保持張量形狀不變
         else:
-            raise ValueError("Reduction must be 'none', 'mean', or 'sum'.")
+            raise ValueError(f"Invalid reduction: {self.reduction}. Must be 'none', 'mean', or 'sum'.")
+        
+        self.loss = self.loss_WO_penalty
+
+        # Add regularization penalty if specified
+        if self.regular_type and model:
+            if self.regular_type == "L1":
+                reg_penalty = sum(p.abs().sum() for p in model.parameters())
+            elif self.regular_type == "L2":
+                reg_penalty = sum(p.pow(2).sum() for p in model.parameters())
+            elif self.regular_type == "L1+L2":
+                reg_penalty = sum(p.abs().sum() + p.pow(2).sum() for p in model.parameters())
+            else:
+                raise ValueError(f"Unsupported regularization type: {self.regular_type}")
+            self.penalty_value = self.regular_lambda * reg_penalty 
+            self.loss += self.penalty_value
+
+        return self.loss
     def __repr__(self):
-        return (f"loss_type={self.loss_type}, "
+        return (f"BCE_FocalLoss("
+                f"loss_type={self.loss_type}, "
                 f"self.alpha={self.alpha}, "
                 f"self.gamma={self.gamma}, "
-                f"self.reduction={self.reduction})")
+                f"self.reduction={self.reduction}, "
+                f"self.regular_type={self.regular_type}, "
+                f"self.regular_lambda={self.regular_lambda})")
     
 class FocalLoss(nn.Module):
     def __init__(self, loss_type="", alpha=8.0, gamma=1.0, regular_type=None, regular_lambda=1e-05):
