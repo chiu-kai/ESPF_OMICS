@@ -390,13 +390,15 @@ print("Attended Values Shape:", attended_values.shape)  # (batch_size, num_drug_
 
 # End of Modules------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def create_mlpEncoder(dimList, activation_func,drop=0.1):
+def create_mlpEncoder(dimList, activation_func,drop=0.1,layernorm=True):
     layers = []
     for i in range(len(dimList) - 1):  
         layers.append(nn.Linear(dimList[i], dimList[i + 1]))
         if i < len(dimList) - 2:  
             layers.append(activation_func) 
-#             layers.append(nn.Dropout(drop))    
+#             layers.append(nn.Dropout(drop))  
+    if layernorm:
+        layers.append(nn.LayerNorm(dimList[-1]))
     return nn.Sequential(*layers)
 #After Commit d16fd58 use def create_mlpEncoder to build mlpEncoder for omics #Commits on Mar 29, 2025 
         ## if i < len(dimList) - 2:  
@@ -466,31 +468,33 @@ class Omics_DrugESPF_Model(nn.Module):
 
             self.MLP4ESPF = nn.Sequential(
                 nn.Linear(max_drug_len * drug_hidden_size, drug_encode_dims[0]),
+                # nn.BatchNorm1d(drug_encode_dims[0]),
                 activation_func,
                 nn.Dropout(hidden_dropout_prob),
-                nn.BatchNorm1d(drug_encode_dims[0]),
                 nn.Linear(drug_encode_dims[0], drug_encode_dims[1]),
+                # nn.BatchNorm1d(drug_encode_dims[1]),
                 activation_func,
                 nn.Dropout(hidden_dropout_prob),
-                nn.BatchNorm1d(drug_encode_dims[1]),
                 nn.Linear(drug_encode_dims[1], drug_encode_dims[2]),
+                # nn.BatchNorm1d(drug_encode_dims[2]),
                 activation_func,
-                nn.BatchNorm1d(drug_encode_dims[2])) 
+                nn.LayerNorm(drug_encode_dims[2])) 
             # Initialize weights with Kaiming uniform initialization, bias with aero
             self._init_weights(self.MLP4ESPF)
         else: # MACCS166
             self.MLP4MACCS = nn.Sequential( # 166->[110,55,22]
                 nn.Linear(166, drug_encode_dims[0]),
                 activation_func,
-                nn.BatchNorm1d(drug_encode_dims[0]),
+                # nn.BatchNorm1d(drug_encode_dims[0]),
                 nn.Dropout(hidden_dropout_prob),
                 nn.Linear(drug_encode_dims[0], drug_encode_dims[1]),
                 activation_func,
-                nn.BatchNorm1d(drug_encode_dims[1]),
+                # nn.BatchNorm1d(drug_encode_dims[1]),
                 nn.Dropout(hidden_dropout_prob),
                 nn.Linear(drug_encode_dims[1], drug_encode_dims[2]),
                 activation_func, # 為了讓concatenate時drug和cell特徵不要差異太大
-                nn.BatchNorm1d(drug_encode_dims[2])) 
+                # nn.BatchNorm1d(drug_encode_dims[2])
+                nn.LayerNorm(drug_encode_dims[2])) # LayerNorm使 sample 的 drug與cell embedding 尺度一致
             # Initialize weights with Kaiming uniform initialization, bias with aero
             self._init_weights(self.MLP4MACCS)
   
