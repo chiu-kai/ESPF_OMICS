@@ -540,7 +540,7 @@ if model_inference is True:
     # eval_targets, eval_outputs,predAUCwithUnknownGT, AttenScorMat_DrugSelf, AttenScorMat_DrugCellSelf,eval_outputs_before_final_activation_list, mean_batch_eval_lossWOpenalty
     (eval_targets, eval_outputs,predAUCwithUnknownGT,
     AttenScorMat_DrugSelf ,AttenScorMat_DrugCellSelf,
-    eval_outputs_before_final_activation_list,   tSNE_embed_list,
+    eval_outputs_before_final_activation_list,
     mean_batch_eval_loss_WO_penalty)  = evaluation(model, None,None,
                                                 criterion, whole_loader, device,ESPF,Drug_SelfAttention, 
                                                 weighted_threshold, few_weight, more_weight, 
@@ -561,9 +561,9 @@ if model_inference is True:
         drugs_metrics[drug_name]["CM"] = test_cm
         # # plot confusion matrix
         cm_datas = [(test_cm, cohort, 'Blues')]
-        Confusion_Matrix_plot(cm_datas,hyperparameter_folder_path=best_weight_path,drug=drug_name)
+        Confusion_Matrix_plot(cm_datas,hyperparameter_folder_path=hyperparameter_folder_path,drug=drug_name)
 #         tSNE_embed_datas = [(tSNE_embed_list,eval_targets, cohort, 'Blues')]
-#         tSNE_embed_plot(tSNE_embed_datas,hyperparameter_folder_path=best_weight_path,drug=drug_name)
+#         tSNE_embed_plot(tSNE_embed_datas,hyperparameter_folder_path=hyperparameter_folder_path,drug=drug_name)
 
     else:#regression use prob_threshold to get binary outcome
         df = pd.DataFrame({'predicted AUDRC': torch.cat(eval_outputs).cpu().numpy(),
@@ -574,8 +574,8 @@ if model_inference is True:
         t_stat, p_val = ttest_ind(sensitive, resistant)
         drugs_metrics[drug_name]["pvalue"]= p_val
         if p_val<=0.05:
-            TCGA_predAUDRC_box_plot_twoClass(drug_name,cohort,df,sensitive,resistant,p_val,best_weight_path)
-output_file = f"{best_weight_path}/{paper}_BF{BF}_{cohort}_inference_result.txt"
+            TCGA_predAUDRC_box_plot_twoClass(drug_name,cohort,df,sensitive,resistant,p_val,hyperparameter_folder_path)
+output_file = f"{hyperparameter_folder_path}/{paper}_BF{BF}_{cohort}_inference_result.txt"
 with open(output_file, "w") as file:
     if 'BCE' in criterion.loss_type :
         for drug_name, metrics in drugs_metrics.items():
