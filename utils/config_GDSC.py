@@ -2,7 +2,7 @@
 # pip install torchmetrics==1.2.0 pandas==2.1.4 numpy==1.26.4
 # python3 ./main_kfold.py --config utils/config.py
 import torch.nn as nn
-from utils.Loss import Custom_LossFunction,Custom_Weighted_LossFunction,FocalLoss
+from utils.Loss import Custom_LossFunction,Custom_Weighted_LossFunction,BCE_FocalLoss
 from utils.Custom_Activation_Function import ScaledSigmoid, ReLU_clamp
 from utils.Metrics import MetricsCalculator_nntorch
 
@@ -16,8 +16,8 @@ test = False #False, True: batch_size = 3, num_epoch = 2, full dataset
 drug_df_path= "../data/GDSC/GDSC_drug_merge_pubchem_dropNA_MACCS.csv"
 one_drug=None # gsk690693 trametinib erlotinib
 ESPF_file = "./ESPF/(NAN) subword_units_map_chembl_freq_1500.csv" #(NAN) subword_units_map_chembl_freq_1500.csv
-AUC_df_path_numerical = "../data/GDSC/GDSC2_fitted_dose_response_27Oct23 from GDSC MaxScreen threshold ModelID678 drug230 samples142188 balanced_high.csv" # gdsc1+2_ccle_z-score　gdsc1+2_ccle_AUC
-AUC_df_path = "../data/GDSC/GDSC2_fitted_dose_response_27Oct23 from GDSC MaxScreen threshold ModelID678 drug230 samples142188 balanced_high.csv"
+AUC_df_path_numerical = "../data/GDSC/GDSC2_fitted_dose_response_27Oct23 from GDSC MaxScreen threshold ModelID678 drug230 samples142188.csv" # gdsc1+2_ccle_z-score　gdsc1+2_ccle_AUC
+AUC_df_path = "../data/GDSC/GDSC2_fitted_dose_response_27Oct23 from GDSC MaxScreen threshold ModelID678 drug230 samples142188.csv"
 response_file = 'down_high'# down/up _ high/even/low 、imbalanced
 omics_files = {
     'Mut': "",
@@ -54,7 +54,7 @@ DrugGraph_pretrainDim = 10
 
 kfoldCV = 5
 include_omics = ['Exp']
-DA_Folder = "VAE_w10SC" # None  VAEwC_1  VAE_w10SC  VAE_w5SC  VAE_gFID  VAE_0  VAE
+DA_Folder = "None" # None  VAEwC_1  VAE_w10SC  VAE_w5SC  VAE_gFID  VAE_0  VAE
 if DA_Folder != 'None':
     omics_files['Exp'] = f"../data/DAPL/share/pretrain/{DA_Folder}/ccle_latent_results.pkl" #
 
@@ -105,7 +105,7 @@ activation_func_final = nn.Sigmoid() # ScaledSigmoid(scale=8) GroundT range ( 0 
 batch_size = 400
 num_epoch = 800 # for k fold CV 
 patience = 20
-learning_rate=1e-05
+learning_rate=1e-04
 
 warmup_lr = True # False True
 decrese_epoch = 60
@@ -116,7 +116,8 @@ CosineAnnealing_LR = False # False True
 T_max = 3 # CosinesAnnealingLR step size
 eta_min = 1e-06 # CosinesAnnealingLR minimum learning rate
 
-criterion = Custom_LossFunction(loss_type="BCE", loss_lambda=1.0, regular_type=None, regular_lambda=1e-06) #nn.MSELoss()##nn.MSELoss()#
+# criterion = Custom_LossFunction(loss_type="BCE", loss_lambda=1.0, regular_type=None, regular_lambda=1e-06) #nn.MSELoss()##nn.MSELoss()#
+criterion = BCE_FocalLoss(loss_type="BCE_Focal",alpha=0.75, gamma=4.0, reduction='mean', regular_type=None, regular_lambda=0.001)
 # criterion =  FocalLoss(loss_type="MSE", alpha=8.0, gamma=1.0, regular_type=None, regular_lambda=1e-05) # loss_type="MSE"/"MAE"
 # criterion = FocalHuberLoss(loss_type="FocalHuberLoss",delta=0.2, alpha=0.3, gamma=2.0, regular_type=None, regular_lambda=1e-05)
 if 'BCE' in criterion.loss_type : 

@@ -669,11 +669,11 @@ class Omics_DCSA_Model(nn.Module):
             nn.Linear(dense_layer_dim[0], dense_layer_dim[1]),
             activation_func,
             nn.Dropout(p=classifier_drop),
-            nn.BatchNorm1d(dense_layer_dim[1]), 
+            # nn.BatchNorm1d(dense_layer_dim[1]), 
             nn.Linear(dense_layer_dim[1], dense_layer_dim[2]),
             activation_func,
             nn.Dropout(p=classifier_drop),
-            nn.BatchNorm1d(dense_layer_dim[2]), 
+            # nn.BatchNorm1d(dense_layer_dim[2]), 
             nn.Linear(dense_layer_dim[2], dense_layer_dim[3]),
             activation_func_final)
         # Initialize weights with Kaiming uniform initialization, bias with zero
@@ -793,25 +793,16 @@ class GINConvNet(torch.nn.Module):
         self.dropout = nn.Dropout(GINconv_drop)
         self.relu = nn.ReLU()
         # convolution layers
-        nn1 = Sequential(Linear(input_dim, dim), ReLU(), Linear(dim, dim))
-#         nn1 = Sequential(Linear(input_dim, dim),BatchNorm1d(dim), ReLU(), Linear(dim, dim)) # 加BatchNorm1d(dim),
-        self.conv1 = GINConv(nn1)
-        self.bn1 = torch.nn.BatchNorm1d(dim)
-        nn2 = Sequential(Linear(dim, dim), ReLU(), Linear(dim, dim))
-        self.conv2 = GINConv(nn2)
-        self.bn2 = torch.nn.BatchNorm1d(dim)
-        nn3 = Sequential(Linear(dim, dim), ReLU(), Linear(dim, dim))
-        self.conv3 = GINConv(nn3)
-        self.bn3 = torch.nn.BatchNorm1d(dim)
-        nn4 = Sequential(Linear(dim, dim), ReLU(), Linear(dim, dim))
-        self.conv4 = GINConv(nn4)
-        self.bn4 = torch.nn.BatchNorm1d(dim)
-        nn5 = Sequential(Linear(dim, dim), ReLU(), Linear(dim, dim))
-        self.conv5 = GINConv(nn5)
-        self.bn5 = torch.nn.BatchNorm1d(dim)
+        self.conv1 = GINConv(Sequential(  Linear(input_dim, dim), ReLU(), Linear(dim, dim)  ))
+        self.bn1 = nn.BatchNorm1d(dim)
+        self.conv2 = GINConv(Sequential(  Linear(dim, dim), ReLU(), Linear(dim, dim)    ))
+        self.bn2 = nn.BatchNorm1d(dim)
+        self.conv3 = GINConv(Sequential(  Linear(dim, dim), ReLU(), Linear(dim, dim)  ))
+        self.bn3 = nn.BatchNorm1d(dim)
         self.fc1_xd = Linear(dim, DrugGraph_pretrainDim)
+        self.drug_ln = nn.LayerNorm(DrugGraph_pretrainDim)
         # combined layers
-        self.out = nn.Linear(DrugGraph_pretrainDim, DrugGraph_pretrainDim)
+        # self.out = nn.Linear(DrugGraph_pretrainDim, DrugGraph_pretrainDim)
 
 
     def forward(self, data, pretrain_flag=False):
@@ -822,16 +813,15 @@ class GINConvNet(torch.nn.Module):
         #data.x shape: torch.Size([62, 78]); 
         # data.edge_index shape: torch.Size([2, 134]); 
         # data.batch shape: torch.Size([62])
-        x = self.relu(self.conv1(x, edge_index))
+        x = self.conv1(x, edge_index)
         x = self.bn1(x)
-        x = self.relu(self.conv2(x, edge_index))
+        x = self.relu(x)
+        x = self.conv2(x, edge_index)
         x = self.bn2(x)
-        x = self.relu(self.conv3(x, edge_index))
+        x = self.relu(x)
+        x = self.conv3(x, edge_index)
         x = self.bn3(x)
-        x = self.relu(self.conv4(x, edge_index))
-        x = self.bn4(x)
-        x = self.relu(self.conv5(x, edge_index)) # x shape after conv: torch.Size([62, 32])
-        x = self.bn5(x)
+        x = self.relu(x)
         if self.flag == False:
             #各個藥pool各自所有nodes
             if drug_graph_pool == "add":
@@ -840,9 +830,10 @@ class GINConvNet(torch.nn.Module):
                 x = global_mean_pool(x, batch=data.batch) # after global_add_pool batch=None torch.Size([bze, 32])
             elif drug_graph_pool == "max":
                 x = global_max_pool(x, batch=data.batch) # after global_add_pool batch=None torch.Size([bze, 32])
-        x = self.relu(self.fc1_xd(x)) # output: torch.Size([bze, 10])
         x = self.dropout(x)
-        x = self.out(x)
+        x = self.fc1_xd(x) # output: torch.Size([bze, 10])
+        x = self.drug_ln(x)
+        # x = self.out(x)
         return x # output: torch.Size([bze, 10])
 
 
