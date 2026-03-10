@@ -502,14 +502,14 @@ class Omics_DrugESPF_Model(nn.Module):
         self.model_final_add = nn.Sequential(
             nn.Linear(dense_layer_dim, dense_layer_dim),
             activation_func,
-            nn.BatchNorm1d(dense_layer_dim),
+            # nn.BatchNorm1d(dense_layer_dim),
             nn.Dropout(p=classifier_drop),
             nn.Linear(dense_layer_dim, dense_layer_dim), 
             activation_func,
-            nn.BatchNorm1d(dense_layer_dim),
+            # nn.BatchNorm1d(dense_layer_dim),
             nn.Dropout(p=classifier_drop),
             nn.Linear(dense_layer_dim, 1),
-            activation_func_final)
+            activation_func_final)# sigmoid for binary classification
         # Initialize weights with Kaiming uniform initialization, bias with aero
         self._init_weights(self.model_final_add)
 
