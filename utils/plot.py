@@ -11,6 +11,15 @@ from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 
+def get_unique_filename(path):
+    base, ext = os.path.splitext(path)
+    counter = 1
+    new_path = path
+    while os.path.exists(new_path):
+        new_path = f"{base}({counter}){ext}"
+        counter += 1
+    return new_path
+
 def p_to_star(p):
     if p < 0.0001:
         return '***'
@@ -264,11 +273,12 @@ def Confusion_Matrix_plot(datasets,hyperparameter_folder_path=None,drug=None):
         if hyperparameter_folder_path is not None:
             output_file = os.path.join(hyperparameter_folder_path, f'{drug}-{title} Confusion_Matrix.png')
             try:
+                output_file = get_unique_filename(output_file)
                 fig.savefig(output_file)
-#                 os.chmod(output_file, 0o444)
-                print(f"✅ Set read-only permissions on: {output_file}")
+                # os.chmod(output_file, 0o444) #Set read-only permissions 
+                print(f"✅ Saved figure: {output_file}")
             except Exception as e:
-                print(f"⚠️ Failed to set permissions: {e}")
+                print(f"⚠️ Failed to save figure: {e}")
     else:
         fig, axs = plt.subplots(1, 3, figsize=(13, 5))
         for i, (cm, title, color) in enumerate(datasets):
