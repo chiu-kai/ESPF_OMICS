@@ -18,7 +18,7 @@ one_drug=None # gsk690693 trametinib erlotinib
 ESPF_file = "./ESPF/(NAN) subword_units_map_chembl_freq_1500.csv" #(NAN) subword_units_map_chembl_freq_1500.csv
 AUC_df_path_numerical = "../data/GDSC/GDSC2_fitted_dose_response_27Oct23 from GDSC MaxScreen threshold ModelID678 drug230 samples142188.csv" # gdsc1+2_ccle_z-score　gdsc1+2_ccle_AUC
 AUC_df_path = "../data/GDSC/GDSC2_fitted_dose_response_27Oct23 from GDSC MaxScreen threshold ModelID678 drug230 samples142188.csv"
-response_file = 'down_high'# down/up _ high/even/low 、imbalanced
+response_file = 'imbalanced'# down/up _ high/even/low 、imbalanced
 omics_files = {
     'Mut': "",
     'Exp': "../data/DAPL/share/ccle_uq1000_feature_sorted.csv", # "../data/CCLE/CCLE_exp_476samples_4692genes.txt",
@@ -47,8 +47,10 @@ response = "lnIC50" #
 #------------------graph-------------
 drug_graph = False # False True
 drug_graph_pool = "add"
+Graph_norm_type = 'batch' # 'batch' | 'graph' | 'none'
+Graph_nlayers = 3 #
 DCSA = False # False True # Drug_Cell_SelfAttention
-drug_pretrain_weight_path = '../data/DAPL/share/pretrain/drug_encoder.pth' 
+drug_pretrain_weight_path = None #None / '../data/DAPL/share/pretrain/drug_encoder.pth'
 DrugGraph_pretrainDim = 10
 #------------------------------------
 
@@ -71,7 +73,7 @@ intermediate_size = drug_embedding_feature_size*2 # graph:64; ESPF: 256
 num_attention_heads = 8      
 attention_probs_dropout_prob = 0.1
 hidden_dropout_prob = 0.1
-classifier_drop = 0
+classifier_drop = 0.1
 GINconv_drop =0
 
 if ESPF is True:
@@ -89,11 +91,11 @@ if model_name == "GIN_DCSA_model":
     if DCSA is True:
         drug_encode_dims = None
         conc_dim = (1+len(include_omics))*(drug_embedding_feature_size+num_attention_heads)+ (len(include_omics)*drug_embedding_feature_size)
-        dense_layer_dim = [conc_dim, conc_dim//2, 1] # [conc_dim, conc_dim//2, conc_dim//2 , 1] 40*2+32=112,56,28,1
+        dense_layer_dim = [conc_dim, conc_dim//2, conc_dim//4, 1] # [208, 104,52, 1] #[conc_dim, conc_dim//2, conc_dim//2 , 1] (32+8)*2+32=112,56,28,1
     elif DCSA is False:
         drug_encode_dims = None
         conc_dim = (1+len(include_omics))*drug_embedding_feature_size # 32*2=64
-        dense_layer_dim = [conc_dim, conc_dim//2, 1] #[conc_dim, conc_dim, conc_dim, 1] 64
+        dense_layer_dim = [conc_dim, conc_dim//2, conc_dim//4, 1] #[128, 64,32, 1] # [conc_dim, conc_dim, conc_dim, 1] 64
 print("drug_encode_dims",drug_encode_dims)
 print("dense_layer_dim",dense_layer_dim)
 #需再修改-------------
@@ -117,7 +119,7 @@ T_max = 3 # CosinesAnnealingLR step size
 eta_min = 1e-06 # CosinesAnnealingLR minimum learning rate
 
 # criterion = Custom_LossFunction(loss_type="BCE", loss_lambda=1.0, regular_type=None, regular_lambda=1e-06) #nn.MSELoss()##nn.MSELoss()#
-criterion = BCE_FocalLoss(loss_type="BCE_Focal",alpha=0.75, gamma=4.0, reduction='mean', regular_type=None, regular_lambda=0.001)
+criterion = BCE_FocalLoss(loss_type="BCE_Focal",alpha=0.75, gamma=3.0, reduction='mean', regular_type=None, regular_lambda=0.001)
 # criterion =  FocalLoss(loss_type="MSE", alpha=8.0, gamma=1.0, regular_type=None, regular_lambda=1e-05) # loss_type="MSE"/"MAE"
 # criterion = FocalHuberLoss(loss_type="FocalHuberLoss",delta=0.2, alpha=0.3, gamma=2.0, regular_type=None, regular_lambda=1e-05)
 if 'BCE' in criterion.loss_type : 
@@ -137,9 +139,7 @@ metrics_calculator = MetricsCalculator_nntorch(types = metrics_type_set)
         regular_lambda (float): The lambda weight for regularization. Default is 1e-05.
         
         # Binary Cross Entropy Loss # already done sigmoid"""
-hyperparameter_print = f'  metric ={metric}\n best_prob_threshold ={best_prob_threshold}\n cohort ={cohort}\n geneNUM={geneNUM}\n one_drug ={one_drug}\n drug_df_path ={drug_df_path}\n ESPF_file ={ESPF_file}\n AUC_df_path_numerical ={AUC_df_path_numerical}\n AUC_df_path ={AUC_df_path}\n omics_dict ={omics_dict}\n omics_files ={omics_files}\n TCGA_pretrain_weight_path_dict ={TCGA_pretrain_weight_path_dict}\n drug_pretrain_weight_path ={drug_pretrain_weight_path}\n seed ={seed}\n  model_name ={model_name}\n AUCtransform ={AUCtransform}\n splitType ={splitType}\n response ={response}\n drug_graph ={drug_graph}\n drug_graph_pool ={drug_graph_pool}\n DCSA ={DCSA}\n kfoldCV ={kfoldCV}\n omics_encode_dim ={[(omic_type,omics_encode_dim_dict[omic_type]) for omic_type in include_omics]}\n DA_Folder ={DA_Folder}\n max_drug_len ={max_drug_len}\n drug_embedding_feature_size ={drug_embedding_feature_size}\n ESPF ={ESPF}\n Drug_SelfAttention ={Drug_SelfAttention}\n n_layer ={n_layer}\n pos_emb_type ={pos_emb_type}\n intermediate_size ={intermediate_size}\n num_attention_heads ={num_attention_heads}\n attention_probs_dropout_prob ={attention_probs_dropout_prob}\n hidden_dropout_prob ={hidden_dropout_prob}\n classifier_drop ={classifier_drop}\n drug_encode_dims ={drug_encode_dims}\n dense_layer_dim = {dense_layer_dim}\n activation_func = {activation_func}\n activation_func_final = {activation_func_final}\n batch_size = {batch_size}\n num_epoch = {num_epoch}\n patience = {patience}\n decrese_epoch = {decrese_epoch}\n Decrease_percent = {Decrease_percent}\n continuous ={continuous}\n learning_rate = {learning_rate}\n criterion ={criterion}\n'
-
-
+hyperparameter_print = f'  metric ={metric}\n best_prob_threshold ={best_prob_threshold}\n cohort ={cohort}\n geneNUM={geneNUM}\n one_drug ={one_drug}\n drug_df_path ={drug_df_path}\n ESPF_file ={ESPF_file}\n AUC_df_path_numerical ={AUC_df_path_numerical}\n AUC_df_path ={AUC_df_path}\n omics_dict ={omics_dict}\n omics_files ={omics_files}\n TCGA_pretrain_weight_path_dict ={TCGA_pretrain_weight_path_dict}\n drug_pretrain_weight_path ={drug_pretrain_weight_path}\n seed ={seed}\n  model_name ={model_name}\n AUCtransform ={AUCtransform}\n splitType ={splitType}\n response ={response}\n drug_graph ={drug_graph}\n drug_graph_pool ={drug_graph_pool}\n Graph_norm_type ={Graph_norm_type}\n Graph_nlayers ={Graph_nlayers}\n DCSA ={DCSA}\n kfoldCV ={kfoldCV}\n omics_encode_dim ={[(omic_type,omics_encode_dim_dict[omic_type]) for omic_type in include_omics]}\n DA_Folder ={DA_Folder}\n max_drug_len ={max_drug_len}\n drug_embedding_feature_size ={drug_embedding_feature_size}\n ESPF ={ESPF}\n Drug_SelfAttention ={Drug_SelfAttention}\n n_layer ={n_layer}\n pos_emb_type ={pos_emb_type}\n intermediate_size ={intermediate_size}\n num_attention_heads ={num_attention_heads}\n attention_probs_dropout_prob ={attention_probs_dropout_prob}\n hidden_dropout_prob ={hidden_dropout_prob}\n classifier_drop ={classifier_drop}\n GINconv_drop ={GINconv_drop}\n drug_encode_dims ={drug_encode_dims}\n dense_layer_dim = {dense_layer_dim}\n activation_func = {activation_func}\n activation_func_final = {activation_func_final}\n batch_size = {batch_size}\n num_epoch = {num_epoch}\n patience = {patience}\n decrese_epoch = {decrese_epoch}\n Decrease_percent = {Decrease_percent}\n continuous ={continuous}\n learning_rate = {learning_rate}\n criterion ={criterion}\n'
 
 __translation_table__ = str.maketrans({
     "*": "",    "/": "",    ":": "-",    "%": "",

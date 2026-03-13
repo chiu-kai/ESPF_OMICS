@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
 from torch.nn import Sequential, Linear, ReLU
-from torch_geometric.nn import GINConv, global_add_pool, global_mean_pool,global_max_pool
+from torch_geometric.nn import GINConv, global_add_pool, global_mean_pool,global_max_pool,GraphNorm
 import math
 import copy
 import numpy as np
@@ -669,7 +669,7 @@ class Omics_DCSA_Model(nn.Module):
             nn.Linear(dense_layer_dim[0], dense_layer_dim[1]),
             activation_func,
             nn.Dropout(p=classifier_drop),
-            # nn.BatchNorm1d(dense_layer_dim[1]), 
+#           nn.BatchNorm1d(dense_layer_dim[1]), 
             nn.Linear(dense_layer_dim[1], dense_layer_dim[2]),
             activation_func,
             nn.Dropout(p=classifier_drop),
@@ -786,55 +786,63 @@ class Omics_DCSA_Model(nn.Module):
 
 # GINConv model
 class GINConvNet(torch.nn.Module):
-    def __init__(self, DrugGraph_pretrainDim, input_dim=78, GINconv_drop=0.2, pretrain_flag=False):
+    def __init__(self, DrugGraph_pretrainDim, Graph_norm_type, Graph_nlayers, input_dim=78, GINconv_drop=0.2, pretrain_flag=False):
         super(GINConvNet, self).__init__()
         self.flag = pretrain_flag
+        self.Graph_nlayers = Graph_nlayers
+        self.Graph_norm_type = Graph_norm_type
         dim = 32
         self.dropout = nn.Dropout(GINconv_drop)
         self.relu = nn.ReLU()
-        # convolution layers
-        self.conv1 = GINConv(Sequential(  Linear(input_dim, dim), ReLU(), Linear(dim, dim)  ))
-        self.bn1 = nn.BatchNorm1d(dim)
-        self.conv2 = GINConv(Sequential(  Linear(dim, dim), ReLU(), Linear(dim, dim)    ))
-        self.bn2 = nn.BatchNorm1d(dim)
-        self.conv3 = GINConv(Sequential(  Linear(dim, dim), ReLU(), Linear(dim, dim)  ))
-        self.bn3 = nn.BatchNorm1d(dim)
-        self.fc1_xd = Linear(dim, DrugGraph_pretrainDim)
-        self.drug_ln = nn.LayerNorm(DrugGraph_pretrainDim)
-        # combined layers
-        # self.out = nn.Linear(DrugGraph_pretrainDim, DrugGraph_pretrainDim)
 
+        # 動態建立 GIN convolution layers
+        self.convs = nn.ModuleList()
+        self.norms = nn.ModuleList()
+
+        for i in range(Graph_nlayers):
+            in_dim = input_dim if i == 0 else dim
+            self.convs.append(
+                GINConv(Sequential(Linear(in_dim, dim), ReLU(), Linear(dim, dim)))
+            )
+            # 根據 Graph_norm_type 建立對應的 normalization layer
+            if Graph_norm_type == 'batch':
+                self.norms.append(nn.BatchNorm1d(dim))
+            elif Graph_norm_type == 'graph':
+                self.norms.append(GraphNorm(dim))
+            elif Graph_norm_type == 'none':
+                self.norms.append(nn.Identity())
+            else:
+                raise ValueError(f"Graph_norm_type 必須為 'batch'、'graph' 或 'none'，但收到：{Graph_norm_type}")
+
+        self.fc1_xd = Linear(dim, DrugGraph_pretrainDim)
+        self.drug_LN = nn.LayerNorm(DrugGraph_pretrainDim)
 
     def forward(self, data, pretrain_flag=False):
-        # EX: drug_data_list [Data(x=[41, 78], edge_index=[2, 88]), 
-        #                     Data(x=[21, 78], edge_index=[2, 46])]
-        #      drug_batch DataBatch(x=[62, 78], edge_index=[2, 134], batch=[62], ptr=[3])
-        x, edge_index = data.x, data.edge_index 
-        #data.x shape: torch.Size([62, 78]); 
-        # data.edge_index shape: torch.Size([2, 134]); 
-        # data.batch shape: torch.Size([62])
-        x = self.conv1(x, edge_index)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.conv2(x, edge_index)
-        x = self.bn2(x)
-        x = self.relu(x)
-        x = self.conv3(x, edge_index)
-        x = self.bn3(x)
-        x = self.relu(x)
+        x, edge_index = data.x, data.edge_index
+
+        for i in range(self.Graph_nlayers):
+            x = self.convs[i](x, edge_index)
+
+            # GraphNorm 需要額外傳入 batch 資訊
+            if self.Graph_norm_type == 'graph':
+                x = self.norms[i](x, data.batch)
+            else:
+                x = self.norms[i](x)
+
+            x = self.relu(x)
+
         if self.flag == False:
-            #各個藥pool各自所有nodes
             if drug_graph_pool == "add":
-                x = global_add_pool(x, batch=data.batch) # after global_add_pool batch=None torch.Size([bze, 32])
+                x = global_add_pool(x, batch=data.batch)
             elif drug_graph_pool == "mean":
-                x = global_mean_pool(x, batch=data.batch) # after global_add_pool batch=None torch.Size([bze, 32])
+                x = global_mean_pool(x, batch=data.batch)
             elif drug_graph_pool == "max":
-                x = global_max_pool(x, batch=data.batch) # after global_add_pool batch=None torch.Size([bze, 32])
+                x = global_max_pool(x, batch=data.batch)
+
         x = self.dropout(x)
-        x = self.fc1_xd(x) # output: torch.Size([bze, 10])
-        x = self.drug_ln(x)
-        # x = self.out(x)
-        return x # output: torch.Size([bze, 10])
+        x = self.fc1_xd(x)
+        x = self.drug_LN(x)
+        return x
 
 
 # GIN_DCSA_model
@@ -882,7 +890,7 @@ class GIN_DCSA_model(nn.Module):
                 self._init_weights(self.match_drug_dim)
         
 # GINConvNet
-        self.GINConv = GINConvNet( DrugGraph_pretrainDim, input_dim=78, GINconv_drop=0.2, pretrain_flag=False)
+        self.GINConv = GINConvNet( DrugGraph_pretrainDim, Graph_norm_type, Graph_nlayers, input_dim=78, GINconv_drop=0.2, pretrain_flag=False,)
         if drug_pretrain_weight_path is not None:
             self.GINConv.load_state_dict(torch.load(drug_pretrain_weight_path))  # 藥物模型預訓練權重
         self.match_cell_dim = nn.Linear(DrugGraph_pretrainDim, drug_hidden_size)
