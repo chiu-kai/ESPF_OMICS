@@ -31,7 +31,7 @@ from utils.split_data_id import split_id,repeat_func
 from utils.create_dataloader import OmicsDrugDataset,InstanceResponseDataset
 from utils.train import train, evaluation
 from utils.correlation import correlation_func
-from utils.plot import loss_curve, correlation_density, Density_Plot_of_AUC_Values, Confusion_Matrix_plot, TCGA_predAUDRC_box_plot_twoClass
+from utils.plot import Inference_Probability_Distribution, loss_curve, correlation_density, Density_Plot_of_AUC_Values, Confusion_Matrix_plot, TCGA_predAUDRC_box_plot_twoClass
 from utils.tools import get_data_value_range,set_seed,get_vram_usage
 print("*"*100)
 
@@ -311,7 +311,6 @@ os.makedirs(hyperparameter_folder_path, exist_ok=True)
 save_path = os.path.join(hyperparameter_folder_path, f'BestValWeight.pt')
 torch.save(BF_best_weight, save_path)
 
-
 #plot loss curve
 loss_curve(model_name, BF_BE_trainLoss_WO_penalty_ls, BF_BE_valLoss_WO_penalty_ls, 
            BF_best_epoch, BF_BE_val_loss,hyperparameter_folder_path,
@@ -574,7 +573,7 @@ if model_inference is True:
         t_stat, p_val = ttest_ind(sensitive, resistant)
         drugs_metrics[drug_name]["pvalue"]= p_val
         if p_val<=0.05:
-            TCGA_predAUDRC_box_plot_twoClass(drug_name,cohort,df,sensitive,resistant,p_val,hyperparameter_folder_path)
+            TCGA_predAUDRC_box_plot_twoClass(drug_name,cohort,df,sensitive,resistant,p_val,hyperparameter_folder_path)    
 output_file = f"{hyperparameter_folder_path}/{paper}_BF{BF}_{cohort}_inference_result.txt"
 with open(output_file, "w") as file:
     if 'BCE' in criterion.loss_type :
@@ -605,7 +604,7 @@ with open(output_file, "w") as file:
     
 # TCGA per drug performance     
 label_df['predict_value'] = np.concatenate(predAUCwithUnknownGT)
-label_df["predict_label"] = (label_df["predict_value"] > best_prob_threshold).astype(int)
+label_df["predict_label"] = (label_df["predict_value"] > float(BF_best_prob_threshold)).astype(int)
 
 if paper == 'DeepCDR':
     cancerType_ls=['CESC']
@@ -638,10 +637,12 @@ tcga_drugs = drug_confusion.index.tolist()#取得 TCGA drug list
 for drug_name in tcga_drugs:
     drugs_metrics[drug_name], _  = metrics_calculator(torch.tensor(label_df[label_df["drug_name"] == drug_name]['Label'].values), 
                                                       torch.tensor(label_df[label_df["drug_name"] == drug_name]['predict_value'].values), 
-                                                      best_prob_threshold, metric, dataset="test")
+                                                      BF_best_prob_threshold, metric, dataset="test")
 tcga_perform_df = drug_confusion.join(pd.DataFrame(drugs_metrics).T.map(lambda x: x.item() if hasattr(x, 'item') else x))
-tcga_perform_df.to_csv("tcga_perDrug_performance.csv", index=True, encoding='utf-8-sig')
+tcga_perform_df.to_csv(f"{hyperparameter_folder_path}/{paper}_{cohort}_perDrug_performance.csv", index=True, encoding='utf-8-sig')
 
+#plot Inference_Probability_Distribution
+Inference_Probability_Distribution( eval_outputs, eval_targets, float(BF_best_prob_threshold), hyperparameter_folder_path, cohort=f"TCGA-{paper}")
 '''
     # CODEAE TCGA data inference
     drug_list=["cisplatin", "5-fluorouracil", "gemcitabine", "sorafenib", "temozolomide"]

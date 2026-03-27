@@ -444,8 +444,7 @@ class Omics_DrugESPF_Model(nn.Module):
             #         activation_func
             #     )
             for omic_type in omics_numfeatures_dict.keys():
-                self.MLP4omics_dict[omic_type] = create_mlpEncoder([omics_numfeatures_dict[omic_type]] + omics_encode_dim_dict[omic_type], activation_func,drop=0.1
-                )
+                self.MLP4omics_dict[omic_type] = create_mlpEncoder([omics_numfeatures_dict[omic_type]] + omics_encode_dim_dict[omic_type], activation_func, drop=0.1, layernorm=True )
                 # Initialize with TCGA pretrain weight
                 if TCGA_pretrain_weight_path_dict is not None:
                     load_TCGA_pretrain_weight(self.MLP4omics_dict[omic_type], TCGA_pretrain_weight_path_dict[omic_type], device)
@@ -631,8 +630,7 @@ class Omics_DCSA_Model(nn.Module):
             #         activation_func
             #     )
             for omic_type in omics_numfeatures_dict.keys():
-                self.MLP4omics_dict[omic_type] = create_mlpEncoder([omics_numfeatures_dict[omic_type]] + omics_encode_dim_dict[omic_type], activation_func,drop=0.1
-                )
+                self.MLP4omics_dict[omic_type] = create_mlpEncoder([omics_numfeatures_dict[omic_type]] + omics_encode_dim_dict[omic_type], activation_func, drop=0.1, layernorm=True )
                 # Initialize with TCGA pretrain weight
                 if TCGA_pretrain_weight_path_dict is not None:
                     load_TCGA_pretrain_weight(self.MLP4omics_dict[omic_type], TCGA_pretrain_weight_path_dict[omic_type], device)
@@ -669,11 +667,11 @@ class Omics_DCSA_Model(nn.Module):
             nn.Linear(dense_layer_dim[0], dense_layer_dim[1]),
             activation_func,
             nn.Dropout(p=classifier_drop),
-#           nn.BatchNorm1d(dense_layer_dim[1]), 
+            # nn.BatchNorm1d(dense_layer_dim[1]), 
             nn.Linear(dense_layer_dim[1], dense_layer_dim[2]),
             activation_func,
             nn.Dropout(p=classifier_drop),
-            # nn.BatchNorm1d(dense_layer_dim[2]), 
+            # nn.BatchNorm1d(dense_layer_dim[2]),
             nn.Linear(dense_layer_dim[2], dense_layer_dim[3]),
             activation_func_final)
         # Initialize weights with Kaiming uniform initialization, bias with zero
@@ -877,8 +875,7 @@ class GIN_DCSA_model(nn.Module):
             
             self.MLP4omics_dict = nn.ModuleDict()
             for omic_type in omics_numfeatures_dict.keys():
-                self.MLP4omics_dict[omic_type] = create_mlpEncoder([omics_numfeatures_dict[omic_type]] + omics_encode_dim_dict[omic_type], activation_func,drop=hidden_dropout_prob
-                )
+                self.MLP4omics_dict[omic_type] = create_mlpEncoder([omics_numfeatures_dict[omic_type]] + omics_encode_dim_dict[omic_type], activation_func, drop=hidden_dropout_prob, layernorm=True )
                 # Initialize with TCGA pretrain weight
                 if TCGA_pretrain_weight_path_dict is not None:
                     load_TCGA_pretrain_weight(self.MLP4omics_dict[omic_type], TCGA_pretrain_weight_path_dict[omic_type], device)
@@ -896,7 +893,7 @@ class GIN_DCSA_model(nn.Module):
         self.match_cell_dim = nn.Linear(DrugGraph_pretrainDim, drug_hidden_size)
         self._init_weights(self.match_cell_dim)
 # Drug_Cell_SelfAttention
-        self.Drug_Cell_SelfAttention = TransformerEncoder(drug_hidden_size+num_attention_heads, intermediate_size, num_attention_heads,attention_probs_dropout_prob, hidden_dropout_prob)#(128+8,512,8,0.1,0.1)
+        self.Drug_Cell_SelfAttention = TransformerEncoder_MultipleLayers(drug_hidden_size+num_attention_heads, intermediate_size, num_attention_heads,attention_probs_dropout_prob, hidden_dropout_prob, n_layer)#(128+8,512,8,0.1,0.1)
 
 # Define the final prediction network 
         self.model_final_add = nn.Sequential(

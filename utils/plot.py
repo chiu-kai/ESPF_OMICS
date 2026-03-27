@@ -30,6 +30,38 @@ def p_to_star(p):
     else:
         return 'n.s.'
 
+
+def Inference_Probability_Distribution(eval_outputs, eval_targets, best_prob_threshold, hyperparameter_folder_path, cohort):
+    logits = torch.concatenate(eval_outputs).detach().cpu().numpy()
+    print("logits.shape: ", logits.shape)
+    labels = torch.concatenate(eval_targets).detach().cpu().numpy()
+    print("labels.shape: ", labels.shape)
+    
+    pos = logits[labels == 1]
+    neg = logits[labels == 0]
+    plt.rcParams["font.family"] = "serif"
+    plt.rcParams['svg.fonttype'] = 'none'# Use system fonts in SVG
+    plt.rcParams['pdf.fonttype'] = 42 # Use Type 42 (TrueType) fonts
+    
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.hist(pos, bins=50, alpha=0.5, density=False)
+    ax.hist(neg, bins=50, alpha=0.5, density=False)
+    sns.kdeplot(logits[labels==1], fill=True, label="Sensitive (1)", ax=ax)
+    sns.kdeplot(logits[labels==0], fill=True, label="Resistant (0)", ax=ax)
+    plt.axvline(best_prob_threshold, linestyle='--', color='red', linewidth=1.5, label=f"Threshold = {best_prob_threshold:.3f}")
+    ax.set_xlabel("probability")#P / Logit
+    ax.set_ylabel("Count")
+    ax.set_title("Probability Distribution")# P / Logits Distribution (before sigmoid)
+    ax.legend()
+    if hyperparameter_folder_path is not None:
+        output_file = os.path.join(hyperparameter_folder_path, f'{cohort}-Inference_Prob_Distribution.png')
+        try:
+            output_file = get_unique_filename(output_file)
+            fig.savefig(output_file)  
+            print(f"✅ Saved figure: {output_file}")
+        except Exception as e:
+            print(f"⚠️ Failed to save figure: {e}")
+            
 def TCGA_predAUDRC_box_plot_twoClass(drug_name,cohort,df,sensitive,resistant,p_val,hyperparameter_folder_path):
     plt.rcParams["font.family"] = "serif"
     plt.rcParams['svg.fonttype'] = 'none'  # Use system fonts in SVG
@@ -303,6 +335,7 @@ def Confusion_Matrix_plot(datasets,hyperparameter_folder_path=None,drug=None):
         if hyperparameter_folder_path is not None:
             output_file = os.path.join(hyperparameter_folder_path, 'Confusion_Matrix.png')
             try:
+                output_file = get_unique_filename(output_file)
                 fig.savefig(output_file)
 #                 os.chmod(output_file, 0o444)
                 print(f"✅ Set read-only permissions on: {output_file}")
