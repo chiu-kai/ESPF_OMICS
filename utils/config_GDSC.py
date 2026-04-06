@@ -108,15 +108,23 @@ batch_size = 400
 num_epoch = 800 # for k fold CV 
 patience = 20
 learning_rate=1e-05
-
-warmup_lr = True # False True
-decrese_epoch = 60
-Decrease_percent = 1
-continuous = True
-
-CosineAnnealing_LR = False # False True
-T_max = 3 # CosinesAnnealingLR step size
-eta_min = 1e-06 # CosinesAnnealingLR minimum learning rate
+                       
+LR_Scheduler = "decay_LR" # "decay_LR" / "CosineAnnealing_LR" / "CyclicLR" / None
+# warmup_lr 
+decay_epoch = 60 # Decay learning rate at this epoch if decay_LR is True
+decay_percent = 1 # Decay_percent = 1 means no decay
+continuous = True # if True, decay learning rate every epochs after decay_epoch ; if False, decay learning rate only once at decay_epoch
+# CosineAnnealing_LR 
+T_max = 3                 # step size
+eta_min = 1e-06           # minimum learning rate
+# CyclicLR 
+base_lr = 5e-06 # Initial learning rate which is the lower boundary in the cycle for each parameter group
+max_lr = 1e-04 # Upper learning rate boundaries in the cycle for each parameter group
+step_size_up = 8 # Number of training iterations in the increasing half of a cycle
+step_size_down = 64 # Number of training iterations in the decreasing half of a cycle
+cyclic_gamma = 0.994 
+cycle_momentum=False #Adam optimizer does not use momentum, so we set cycle_momentum to False when using CyclicLR with Adam.
+mode = "exp_range" # One of {triangular, triangular2, exp_range}. Default: 'triangular'.
 
 criterion = Custom_LossFunction(loss_type="BCE", loss_lambda=1.0, regular_type=None, regular_lambda=1e-06) #nn.MSELoss()##nn.MSELoss()#
 # criterion = BCE_FocalLoss(loss_type="BCE_Focal",alpha=0.75, gamma=3.0, reduction='mean', regular_type=None, regular_lambda=0.001)
@@ -139,7 +147,7 @@ metrics_calculator = MetricsCalculator_nntorch(types = metrics_type_set)
         regular_lambda (float): The lambda weight for regularization. Default is 1e-05.
         
         # Binary Cross Entropy Loss # already done sigmoid"""
-hyperparameter_print = f'  metric ={metric}\n best_prob_threshold ={best_prob_threshold}\n cohort ={cohort}\n geneNUM={geneNUM}\n one_drug ={one_drug}\n drug_df_path ={drug_df_path}\n ESPF_file ={ESPF_file}\n AUC_df_path_numerical ={AUC_df_path_numerical}\n AUC_df_path ={AUC_df_path}\n omics_dict ={omics_dict}\n omics_files ={omics_files}\n TCGA_pretrain_weight_path_dict ={TCGA_pretrain_weight_path_dict}\n drug_pretrain_weight_path ={drug_pretrain_weight_path}\n seed ={seed}\n  model_name ={model_name}\n AUCtransform ={AUCtransform}\n splitType ={splitType}\n response ={response}\n drug_graph ={drug_graph}\n drug_graph_pool ={drug_graph_pool}\n Graph_norm_type ={Graph_norm_type}\n Graph_nlayers ={Graph_nlayers}\n DCSA ={DCSA}\n kfoldCV ={kfoldCV}\n omics_encode_dim ={[(omic_type,omics_encode_dim_dict[omic_type]) for omic_type in include_omics]}\n DA_Folder ={DA_Folder}\n max_drug_len ={max_drug_len}\n drug_embedding_feature_size ={drug_embedding_feature_size}\n ESPF ={ESPF}\n Drug_SelfAttention ={Drug_SelfAttention}\n n_layer ={n_layer}\n pos_emb_type ={pos_emb_type}\n intermediate_size ={intermediate_size}\n num_attention_heads ={num_attention_heads}\n attention_probs_dropout_prob ={attention_probs_dropout_prob}\n hidden_dropout_prob ={hidden_dropout_prob}\n classifier_drop ={classifier_drop}\n GINconv_drop ={GINconv_drop}\n drug_encode_dims ={drug_encode_dims}\n dense_layer_dim = {dense_layer_dim}\n activation_func = {activation_func}\n activation_func_final = {activation_func_final}\n batch_size = {batch_size}\n num_epoch = {num_epoch}\n patience = {patience}\n decrese_epoch = {decrese_epoch}\n Decrease_percent = {Decrease_percent}\n continuous ={continuous}\n learning_rate = {learning_rate}\n criterion ={criterion}\n'
+hyperparameter_print = f'  metric ={metric}\n best_prob_threshold ={best_prob_threshold}\n cohort ={cohort}\n geneNUM={geneNUM}\n one_drug ={one_drug}\n drug_df_path ={drug_df_path}\n ESPF_file ={ESPF_file}\n AUC_df_path_numerical ={AUC_df_path_numerical}\n AUC_df_path ={AUC_df_path}\n omics_dict ={omics_dict}\n omics_files ={omics_files}\n TCGA_pretrain_weight_path_dict ={TCGA_pretrain_weight_path_dict}\n drug_pretrain_weight_path ={drug_pretrain_weight_path}\n seed ={seed}\n  model_name ={model_name}\n AUCtransform ={AUCtransform}\n splitType ={splitType}\n response ={response}\n drug_graph ={drug_graph}\n drug_graph_pool ={drug_graph_pool}\n Graph_norm_type ={Graph_norm_type}\n Graph_nlayers ={Graph_nlayers}\n DCSA ={DCSA}\n kfoldCV ={kfoldCV}\n omics_encode_dim ={[(omic_type,omics_encode_dim_dict[omic_type]) for omic_type in include_omics]}\n DA_Folder ={DA_Folder}\n max_drug_len ={max_drug_len}\n drug_embedding_feature_size ={drug_embedding_feature_size}\n ESPF ={ESPF}\n Drug_SelfAttention ={Drug_SelfAttention}\n n_layer ={n_layer}\n pos_emb_type ={pos_emb_type}\n intermediate_size ={intermediate_size}\n num_attention_heads ={num_attention_heads}\n attention_probs_dropout_prob ={attention_probs_dropout_prob}\n hidden_dropout_prob ={hidden_dropout_prob}\n classifier_drop ={classifier_drop}\n GINconv_drop ={GINconv_drop}\n drug_encode_dims ={drug_encode_dims}\n dense_layer_dim = {dense_layer_dim}\n activation_func = {activation_func}\n activation_func_final = {activation_func_final}\n batch_size = {batch_size}\n num_epoch = {num_epoch}\n patience = {patience}\n learning_rate = {learning_rate}\n criterion ={criterion}\n LR_Scheduler ={LR_Scheduler}\n decay_epoch = {decay_epoch}\n decay_percent = {decay_percent}\n continuous ={continuous}\n T_max ={T_max}\n eta_min ={eta_min}\n base_lr ={base_lr}\n max_lr ={max_lr}\n step_size_up ={step_size_up}\n step_size_down ={step_size_down}\n cyclic_gamma ={cyclic_gamma}\n cycle_momentum ={cycle_momentum}\n mode ={mode}\n TrackGradient = {TrackGradient} \n'
 
 __translation_table__ = str.maketrans({
     "*": "",    "/": "",    ":": "-",    "%": "",

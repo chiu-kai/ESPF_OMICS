@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import time 
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, CyclicLR
 import argparse
 import importlib.util
 # import config.py dynamically
@@ -79,13 +79,13 @@ class GradientNormTracker:
 #    loss.backward()
 #    gradient_norms_list = tracker.check_and_log(model)  # Check and log gradient norms
 # gradient_fig = tracker.plot_gradient_norms()
-def warmup_lr_scheduler(optimizer, decrese_epoch, Decrease_percent,continuous=True):
+def decay_LR_scheduler(optimizer, decay_epoch, decay_percent,continuous=True):
     def f(epoch):
-        if epoch >= decrese_epoch:
+        if epoch >= decay_epoch:
             if continuous is True:
-                return Decrease_percent ** (epoch-decrese_epoch+1)
+                return decay_percent ** (epoch-decay_epoch+1)
             elif continuous is not True:
-                return Decrease_percent
+                return decay_percent
         return 1
     return torch.optim.lr_scheduler.LambdaLR(optimizer, f)
 
@@ -178,11 +178,16 @@ def train(model, optimizer,
           ESPF,Drug_SelfAttention,seed,
           weighted_threshold, few_weight, more_weight, TrackGradient=False):
     
-    # Training with early stopping (assuming you've defined the EarlyStopping logic)
-    if warmup_lr is True:
-        lr_scheduler = warmup_lr_scheduler(optimizer, decrese_epoch, Decrease_percent,continuous)
-    if CosineAnnealing_LR is True:
-        lr_scheduler = CosineAnnealingLR(optimizer, T_max=T_max, eta_min=eta_min)
+    lr_scheduler = None
+    if LR_Scheduler == "decay_LR":
+        lr_scheduler = decay_LR_scheduler(optimizer, decay_epoch, decay_percent, continuous )
+    elif LR_Scheduler == "CosineAnnealing_LR":
+        lr_scheduler = CosineAnnealingLR(optimizer, T_max, eta_min )
+    elif LR_Scheduler == "CyclicLR":
+        lr_scheduler = CyclicLR(optimizer, base_lr, max_lr, step_size_up, step_size_down, gamma=cyclic_gamma, cycle_momentum=False, mode="exp_range")
+    elif LR_Scheduler is not None:
+        raise ValueError(f"unknown LR_Scheduler: '{LR_Scheduler}', "f"please choose 'decay_LR' / 'CosineAnnealing_LR' / 'CyclicLR' / None")
+
     if TrackGradient is True:
         Grad_tracker = GradientNormTracker(batch_size,check_frequency=10, enable_plot=True)  # Enable or disable plotting
 
@@ -251,11 +256,10 @@ def train(model, optimizer,
                                                         weighted_threshold, few_weight, more_weight, 
                                                         outputcontrol='plotLossCurve') 
         
-        
-        if decrese_epoch is not None:
-            # print("lr of epoch", epoch + 1, "=>", lr_scheduler.get_lr()) 
+        if lr_scheduler is not None:
             lr_scheduler.step()
-
+        
+        # Training with early stopping (assuming you've defined the EarlyStopping logic)
         if mean_batch_val_loss_WO_penalty < BE_val_loss_WO_penalty: # BEpo
             BE_val_loss_WO_penalty = mean_batch_val_loss_WO_penalty # BEpo
             BE_val_train_loss_WO_penalty = mean_batch_train_loss_WO_penalty
@@ -268,13 +272,12 @@ def train(model, optimizer,
             BEpo_valLoss_WO_penalty_ls = val_epoch_loss_WO_penalty_ls
             BEpo_trainloss_W_penalty_ls = train_epoch_loss_W_penalty_ls
             BEpo_trainLoss_WO_penalty_ls = train_epoch_loss_WO_penalty_ls
-
-
         else:
             counter += 1
             if counter >= patience:
                 print(f'Early stopping after {patience} epochs of no improvement.')
                 break
+            
     if TrackGradient is True:    
         gradient_fig = Grad_tracker.plot_gradient_norms()
     else:

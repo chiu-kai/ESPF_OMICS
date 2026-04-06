@@ -83,6 +83,7 @@ def TCGA_predAUDRC_box_plot_twoClass(drug_name,cohort,df,sensitive,resistant,p_v
     plt.tight_layout()
     output_file = os.path.join(hyperparameter_folder_path, f'TCGA_{drug_name}_predAUDRC_box_plot_twoClass.png')
     try:
+        output_file = get_unique_filename(output_file)
         fig.savefig(output_file)
 #         os.chmod(output_file, 0o444)
     except Exception as e:
