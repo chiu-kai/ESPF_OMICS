@@ -18,7 +18,7 @@ one_drug=None # gsk690693 trametinib erlotinib
 ESPF_file = "./ESPF/(NAN) subword_units_map_chembl_freq_1500.csv" #(NAN) subword_units_map_chembl_freq_1500.csv
 AUC_df_path_numerical = "../data/GDSC/GDSC2_fitted_dose_response_27Oct23 from GDSC MaxScreen threshold ModelID966 drug230 samples145655 down_balanced_combined.csv" # gdsc1+2_ccle_z-score　gdsc1+2_ccle_AUC
 AUC_df_path = "../data/GDSC/GDSC2_fitted_dose_response_27Oct23 from GDSC MaxScreen threshold ModelID966 drug230 samples145655 down_balanced_combined.csv"
-response_file = 'down_combined'# down/up _ high/even/low 、imbalanced
+response_file = 'down_balanced_combined'# down/up _ high/even/low 、imbalanced
 omics_files = {
     'Mut': "",
     'Exp': "../data/DAPL/share/ccle_uq1000_feature_sorted.csv", # "../data/CCLE/CCLE_exp_476samples_4692genes.txt",
@@ -38,7 +38,7 @@ TCGA_pretrain_weight_path_dict = None #{'Mut': "./results/Encoder_tcga_mut_1000_
                               # }
 seed = 42
 
-model_name = "Omics_DrugESPF_Model" # Omics_DrugESPF_Model  Omics_DCSA_Model
+model_name = "Omics_DCSA_Model" # Omics_DrugESPF_Model  Omics_DCSA_Model
 AUCtransform = None #"-log2"
 # samples splitType= 'byCCL' # byCCL byDrug 
 splitType= 'ModelID' # ModelID or drug_name or whole
@@ -47,7 +47,7 @@ response = "lnIC50" #
 #------------------graph-------------
 drug_graph = False # False True
 drug_graph_pool = "add"
-Graph_norm_type = 'batch' # 'batch' | 'graph' | 'none'
+Graph_norm_type = 'graph' # 'batch' | 'graph' | 'none'
 Graph_nlayers = 3 #
 DCSA = False # False True # Drug_Cell_SelfAttention
 drug_pretrain_weight_path = None #None / '../data/DAPL/share/pretrain/drug_encoder.pth'
@@ -56,15 +56,15 @@ DrugGraph_pretrainDim = 10
 
 kfoldCV = 5
 include_omics = ['Exp']
-DA_Folder = "None" # None  VAEwC_1  VAE_w10SC  VAE_w5SC  VAE_gFID  VAE_0  VAE
+DA_Folder = "VAEwC_1" # None  VAEwC_1  VAE_w10SC  VAE_w5SC  VAE_gFID  VAE_0  VAE
 if DA_Folder != 'None':
     omics_files['Exp'] = f"../data/DAPL/share/pretrain/{DA_Folder}/ccle_latent_results.pkl" #
 
 max_drug_len=50 # 不夠補零補到50 / 超過取前50個subwords(index) !!!!須改方法!!!! 
 drug_embedding_feature_size = 128 # graph:32; ESPF: 128
 
-ESPF = False # False True
-Drug_SelfAttention = False
+ESPF = True # False True
+Drug_SelfAttention = True
 n_layer = 1 # transformer layer number # control both Drug_SelfAttention and DCSA
 pos_emb_type = 'sinusoidal' # 'learned' 'sinusoidal'
 #需再修改-----------
@@ -73,7 +73,7 @@ intermediate_size = drug_embedding_feature_size*2 # graph:64; ESPF: 256
 num_attention_heads = 8      
 attention_probs_dropout_prob = 0.1
 hidden_dropout_prob = 0.1
-classifier_drop = 0.1
+classifier_drop = 0
 GINconv_drop =0
 
 if ESPF is True:
@@ -108,9 +108,9 @@ batch_size = 400
 num_epoch = 800 # for k fold CV 
 patience = 20
 learning_rate=1e-05
-                       
-LR_Scheduler = "decay_LR" # "decay_LR" / "CosineAnnealing_LR" / "CyclicLR" / None
-# warmup_lr 
+
+LR_Scheduler = "CyclicLR" # "decay_LR" / "CosineAnnealing_LR" / "CyclicLR" / None
+# decay_LR 
 decay_epoch = 60 # Decay learning rate at this epoch if decay_LR is True
 decay_percent = 1 # Decay_percent = 1 means no decay
 continuous = True # if True, decay learning rate every epochs after decay_epoch ; if False, decay learning rate only once at decay_epoch
@@ -119,10 +119,10 @@ T_max = 3                 # step size
 eta_min = 1e-06           # minimum learning rate
 # CyclicLR 
 base_lr = 5e-06 # Initial learning rate which is the lower boundary in the cycle for each parameter group
-max_lr = 1e-04 # Upper learning rate boundaries in the cycle for each parameter group
+max_lr = 5e-05 # Upper learning rate boundaries in the cycle for each parameter group
 step_size_up = 8 # Number of training iterations in the increasing half of a cycle
 step_size_down = 64 # Number of training iterations in the decreasing half of a cycle
-cyclic_gamma = 0.994 
+cyclic_gamma = 0.992 
 cycle_momentum=False #Adam optimizer does not use momentum, so we set cycle_momentum to False when using CyclicLR with Adam.
 mode = "exp_range" # One of {triangular, triangular2, exp_range}. Default: 'triangular'.
 

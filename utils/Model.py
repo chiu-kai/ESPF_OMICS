@@ -784,38 +784,38 @@ class Omics_DCSA_Model(nn.Module):
 
 # GINConv model
 class GINConvNet(torch.nn.Module):
-    def __init__(self, DrugGraph_pretrainDim, Graph_norm_type, Graph_nlayers, input_dim=78, GINconv_drop=0.2, pretrain_flag=False):
+    def __init__(self, drug_hidden_size, Graph_norm_type, Graph_nlayers, input_dim=78, GINconv_drop=0.2, pretrain_flag=False):
         super(GINConvNet, self).__init__()
         self.flag = pretrain_flag
         self.Graph_nlayers = Graph_nlayers
         self.Graph_norm_type = Graph_norm_type
-        dim = 32
+        self.dim = drug_hidden_size
         self.dropout = nn.Dropout(GINconv_drop)
         self.relu = nn.ReLU()
-
+        self.drug_graph_pool = drug_graph_pool
         # 動態建立 GIN convolution layers
         self.convs = nn.ModuleList()
         self.norms = nn.ModuleList()
 
         for i in range(Graph_nlayers):
-            in_dim = input_dim if i == 0 else dim
+            in_dim = input_dim if i == 0 else self.dim
             self.convs.append(
-                GINConv(Sequential(Linear(in_dim, dim), ReLU(), Linear(dim, dim)))
+                GINConv(Sequential(Linear(in_dim, self.dim), ReLU(), Linear(self.dim, self.dim)))
             )
             # 根據 Graph_norm_type 建立對應的 normalization layer
             if Graph_norm_type == 'batch':
-                self.norms.append(nn.BatchNorm1d(dim))
+                self.norms.append(nn.BatchNorm1d(self.dim))
             elif Graph_norm_type == 'graph':
-                self.norms.append(GraphNorm(dim))
+                self.norms.append(GraphNorm(self.dim))
             elif Graph_norm_type == 'none':
                 self.norms.append(nn.Identity())
             else:
                 raise ValueError(f"Graph_norm_type 必須為 'batch'、'graph' 或 'none'，但收到：{Graph_norm_type}")
 
-        self.fc1_xd = Linear(dim, DrugGraph_pretrainDim)
-        self.drug_LN = nn.LayerNorm(DrugGraph_pretrainDim)
+#         self.fc1_xd = Linear(self.dim, DrugGraph_pretrainDim)
+        self.drug_LN = nn.LayerNorm(self.dim)
 
-    def forward(self, data, pretrain_flag=False):
+    def forward(self, data):
         x, edge_index = data.x, data.edge_index
 
         for i in range(self.Graph_nlayers):
@@ -830,15 +830,15 @@ class GINConvNet(torch.nn.Module):
             x = self.relu(x)
 
         if self.flag == False:
-            if drug_graph_pool == "add":
+            if self.drug_graph_pool == "add":
                 x = global_add_pool(x, batch=data.batch)
-            elif drug_graph_pool == "mean":
+            elif self.drug_graph_pool == "mean":
                 x = global_mean_pool(x, batch=data.batch)
-            elif drug_graph_pool == "max":
+            elif self.drug_graph_pool == "max":
                 x = global_max_pool(x, batch=data.batch)
 
         x = self.dropout(x)
-        x = self.fc1_xd(x)
+#         x = self.fc1_xd(x)
         x = self.drug_LN(x)
         return x
 
@@ -859,7 +859,7 @@ class GIN_DCSA_model(nn.Module):
                 )
                 #apply a linear tranformation to omics embedding to match the hidden size of the drug
                 self.match_drug_dim = nn.Linear(omics_encode_dim_dict[omic_type][-1], drug_hidden_size)
-                self._init_weights(self.match_drug_dim)
+                self.match_drug_dim.apply(self._init_weights)
         else:
             def load_TCGA_pretrain_weight(model, pretrained_weights_path, device):
                 state_dict = torch.load(pretrained_weights_path, map_location=device)  # Load the state_dict
@@ -880,18 +880,21 @@ class GIN_DCSA_model(nn.Module):
                 if TCGA_pretrain_weight_path_dict is not None:
                     load_TCGA_pretrain_weight(self.MLP4omics_dict[omic_type], TCGA_pretrain_weight_path_dict[omic_type], device)
                 else: # Initialize weights with Kaiming uniform initialization, bias with aero
-                    self._init_weights(self.MLP4omics_dict[omic_type])
+                    self.MLP4omics_dict[omic_type].apply(self._init_weights)
 
                 #apply a linear tranformation to omics embedding to match the hidden size of the drug
                 self.match_drug_dim = nn.Linear(omics_encode_dim_dict[omic_type][-1], drug_hidden_size)
-                self._init_weights(self.match_drug_dim)
+                self.match_drug_dim.apply(self._init_weights)
         
 # GINConvNet
-        self.GINConv = GINConvNet( DrugGraph_pretrainDim, Graph_norm_type, Graph_nlayers, input_dim=78, GINconv_drop=0.2, pretrain_flag=False,)
+        self.GINConv = GINConvNet( drug_hidden_size, Graph_norm_type, Graph_nlayers, input_dim=78, GINconv_drop=0.2, pretrain_flag=False,)
         if drug_pretrain_weight_path is not None:
             self.GINConv.load_state_dict(torch.load(drug_pretrain_weight_path))  # 藥物模型預訓練權重
-        self.match_cell_dim = nn.Linear(DrugGraph_pretrainDim, drug_hidden_size)
-        self._init_weights(self.match_cell_dim)
+            self.match_cell_dim = nn.Linear(DrugGraph_pretrainDim, drug_hidden_size)
+            self.match_cell_dim.apply(self._init_weights)
+        else:
+            self.GINConv.apply(self._init_weights)
+        
 # Drug_Cell_SelfAttention
         self.Drug_Cell_SelfAttention = TransformerEncoder_MultipleLayers(drug_hidden_size+num_attention_heads, intermediate_size, num_attention_heads,attention_probs_dropout_prob, hidden_dropout_prob, n_layer)#(128+8,512,8,0.1,0.1)
 
@@ -906,19 +909,24 @@ class GIN_DCSA_model(nn.Module):
             nn.Linear(dense_layer_dim[2], 1),
             activation_func_final)
         # Initialize weights with Kaiming uniform initialization, bias with aero
-        self._init_weights(self.model_final_add)
+        self.model_final_add.apply(self._init_weights)
 
         self.print_flag = True
         self.attention_probs = None # store Attention score matrix
     
-    def _init_weights(self, model):
-        if isinstance(model, nn.Linear):  # 直接初始化 nn.Linear 層
-            init.kaiming_uniform_(model.weight, a=0, mode='fan_in', nonlinearity='relu')
-            if model.bias is not None:
-                init.zeros_(model.bias)
-        elif isinstance(model, nn.ModuleList) or isinstance(model, nn.Sequential):  # 遍歷子層
-            for layer in model:
-                self._init_weights(layer)
+    def _init_weights(self, m):
+        # 使用 .apply() 時，m 會代表模型中的每一個子層
+        if isinstance(m, nn.Linear):
+            # Kaiming 初始化
+            nn.init.kaiming_uniform_(m.weight, a=0, mode='fan_in', nonlinearity='relu')
+            if m.bias is not None:
+                nn.init.zeros_(m.bias)
+        elif isinstance(m, (nn.BatchNorm1d, nn.LayerNorm)):
+            # Normalization 層的初始化（通常 weight 設為 1, bias 設為 0）
+            if m.weight is not None:
+                nn.init.constant_(m.weight, 1)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
 
     def forward(self, omics_tensor_dict,drug, device, **kwargs):
         DCSA = kwargs['DCSA']
@@ -930,8 +938,9 @@ class GIN_DCSA_model(nn.Module):
             omic_embed = self.match_drug_dim(omic_embed) #(bsz, drug_hidden_size)
             omic_embeddings_ls.append(omic_embed)
         
-        Drug_graph_feat = self.GINConv(drug,pretrain_flag=False) # Drug_graph_feat(bsz, drug_hidden_size)
-        Drug_graph_feat = self.match_cell_dim(Drug_graph_feat) # match Drug_graph_feat to drug_hidden_size
+        Drug_graph_feat = self.GINConv(drug) # Drug_graph_feat(bsz, drug_hidden_size)
+        if drug_pretrain_weight_path is not None:
+            Drug_graph_feat = self.match_cell_dim(Drug_graph_feat) # match Drug_graph_feat to drug_hidden_size
         
         AttenScorMat_DrugCellSelf= None
         if DCSA is True:

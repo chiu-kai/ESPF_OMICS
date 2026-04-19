@@ -253,8 +253,8 @@ for fold, (train_idx, val_idx) in enumerate(split_generator):
     # BE_val_loss = mean_batch_eval_loss_WO_penalty
     print("best Epoch : ",best_epoch,"BE_val_loss : ",BE_val_loss,
           "BE_val_train_loss_WO_penalty : ",BE_val_train_loss_WO_penalty," batch_size : ",batch_size,
-          "learning_rate : ",learning_rate," decrese_epoch :" ,decrese_epoch  ,
-          " with Decrease_percent : ",Decrease_percent )
+          "learning_rate : ",learning_rate," decay_epoch :" ,decay_epoch  ,
+          " with decay_percent : ",decay_percent )
 
     kfold_losses[fold] = { 'train': BE_val_train_loss_WO_penalty,  # Train loss in best Validation epoch
                            'val': BE_val_loss,  # best epoch
