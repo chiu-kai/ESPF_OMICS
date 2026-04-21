@@ -481,12 +481,22 @@ if model_inference is True:
 
     model.to(device=device)
     model.load_state_dict(BF_best_weight) 
-    
-# DiSyn TCGA data inference
-    paper = 'DiSyn'# 'DeepCDR' DiSyn
-    label_df_pth = f"../data/TCGA/DiSyn TCGA drug response match exp file samples.csv" # TCGA DeepCDR samples.csv DiSyn TCGA drug response match exp file samples.csv
-    TCGA_EXP_pth = f"../data/TCGA/TCGA DiSyn samples EXP1426.csv"# TCGA DeepCDR samples EXP1426.csv TCGA DiSyn samples EXP1426.csv
-    
+
+paper_lst = ['DiSyn', 'DAPL']  # ['DeepCDR', 'DiSyn', 'DAPL']  
+
+# 集中管理各 paper 的路徑
+paths = {
+    'DiSyn': {'label': "../data/TCGA/DiSyn TCGA drug response match exp file samples.csv",
+              'exp': "../data/TCGA/TCGA DiSyn samples EXP1426.csv"},
+    'DAPL': {'label': "../data/DAPL/share/TCGA_fromDAPL/TCGA_drug_response_from_DAPL.csv",
+             'exp': "../data/DAPL/share/TCGA_fromDAPL/TCGA_EXP1246_from_DAPL.csv"},
+    'DeepCDR': {'label': "../data/TCGA/TCGA DeepCDR samples.csv",
+                'exp': "../data/TCGA/TCGA DeepCDR samples EXP1426.csv"}
+}
+for paper in paper_lst:
+    label_df_pth = paths[paper]['label']
+    TCGA_EXP_pth = paths[paper]['exp'] 
+
     if DA_Folder != 'None':
         CohortExp_df = pd.read_csv(f"../data/DAPL/share/pretrain/{DA_Folder}/tcga_latent_results_{paper}_rmdup.csv", sep=',', index_col=0)
     else:
@@ -545,24 +555,23 @@ if model_inference is True:
                                                 weighted_threshold, few_weight, more_weight, 
                                                 outputcontrol='inference')
     # Calculate classification metrics  
-    drugs_metrics={}
-    drug_name = paper
+    paper_metrics={}
     
-    drugs_metrics[drug_name], _  = metrics_calculator(torch.cat(eval_targets), torch.cat(eval_outputs), BF_best_prob_threshold, metric, dataset="test")
-    drugs_metrics[drug_name]["eval_targets"]=eval_targets
-    drugs_metrics[drug_name]["eval_outputs"]=eval_outputs
-    drugs_metrics[drug_name]["eval_outputs_before_final_activation_list"]=eval_outputs_before_final_activation_list
-    drugs_metrics[drug_name][criterion.loss_type] = mean_batch_eval_loss_WO_penalty
+    paper_metrics[paper], _  = metrics_calculator(torch.cat(eval_targets), torch.cat(eval_outputs), BF_best_prob_threshold, metric, dataset="test")
+    paper_metrics[paper]["eval_targets"]=eval_targets
+    paper_metrics[paper]["eval_outputs"]=eval_outputs
+    paper_metrics[paper]["eval_outputs_before_final_activation_list"]=eval_outputs_before_final_activation_list
+    paper_metrics[paper][criterion.loss_type] = mean_batch_eval_loss_WO_penalty
 
     if 'BCE' in criterion.loss_type :
         (test_cm ,  test_GT_0_count, test_GT_1_count, 
         test_pred_binary_0_count, test_pred_binary_1_count ) =metrics_calculator.confusion_matrix(torch.cat(eval_targets), torch.cat(eval_outputs), BF_best_prob_threshold)
-        drugs_metrics[drug_name]["CM"] = test_cm
+        paper_metrics[paper]["CM"] = test_cm
         # # plot confusion matrix
         cm_datas = [(test_cm, cohort, 'Blues')]
-        Confusion_Matrix_plot(cm_datas,hyperparameter_folder_path=hyperparameter_folder_path,drug=drug_name)
+        Confusion_Matrix_plot(cm_datas,hyperparameter_folder_path=hyperparameter_folder_path,drug=paper)
 #         tSNE_embed_datas = [(tSNE_embed_list,eval_targets, cohort, 'Blues')]
-#         tSNE_embed_plot(tSNE_embed_datas,hyperparameter_folder_path=hyperparameter_folder_path,drug=drug_name)
+#         tSNE_embed_plot(tSNE_embed_datas,hyperparameter_folder_path=hyperparameter_folder_path,drug=paper)
 
     else:#regression use prob_threshold to get binary outcome
         df = pd.DataFrame({'predicted AUDRC': torch.cat(eval_outputs).cpu().numpy(),
@@ -571,78 +580,80 @@ if model_inference is True:
         sensitive = df[df['Label'] == 1]['predicted AUDRC']
         resistant = df[df['Label'] == 0]['predicted AUDRC']
         t_stat, p_val = ttest_ind(sensitive, resistant)
-        drugs_metrics[drug_name]["pvalue"]= p_val
+        paper_metrics[paper]["pvalue"]= p_val
         if p_val<=0.05:
-            TCGA_predAUDRC_box_plot_twoClass(drug_name,cohort,df,sensitive,resistant,p_val,hyperparameter_folder_path)    
-output_file = f"{hyperparameter_folder_path}/{paper}_BF{BF}_{cohort}_inference_result.txt"
-with open(output_file, "w") as file:
-    if 'BCE' in criterion.loss_type :
-        for drug_name, metrics in drugs_metrics.items():
-            file.write(f"\n{drug_name}\n")
-            file.write(f"BF_best_prob_threshold: {BF_best_prob_threshold} according to {metric}\n")
-            file.write(f"  test {criterion.loss_type}loss: {metrics[criterion.loss_type].item():.6f}\n")
-            for key in metrics_type_set:
-                file.write(f"  '{key}': {metrics[key].item():.4f}\n")
-            for key in ["eval_targets","eval_outputs_before_final_activation_list","eval_outputs"]:
-                file.write(f"\n{key}\n{metrics[key][0][:20]}\n\n")
-    else:
-        for drug_name, metrics in drugs_metrics.items():
-            file.write(f"{drug_name}\n")
-            file.write(f"  test {criterion.loss_type}loss: {metrics[criterion.loss_type].item():.6f}\n")
-            if metrics['pvalue'].item() <= 0.05:
-                file.write(f"\n pvalue <= 0.05 ")
-            else:
-                file.write(f"\n pvalue > 0.05 ")
-            file.write(f"{drug_name} pvalue: {metrics['pvalue'].item():.4f}\n\n")
-            for key in ["eval_targets","eval_outputs_before_final_activation_list","eval_outputs"]:
-                file.write(f"\n{key}\n{metrics[key][0][:20]}\n")       
-    os.chmod(output_file, 0o444)# Read-only
-    del model
-    torch.cuda.set_device("cuda:0")# Set the current device
-    gc.collect()# Optionally, force garbage collection to release memory 
-    torch.cuda.empty_cache() # Empty PyTorch cache
-    
-# TCGA per drug performance     
-label_df['predict_value'] = np.concatenate(predAUCwithUnknownGT)
-label_df["predict_label"] = (label_df["predict_value"] > float(BF_best_prob_threshold)).astype(int)
+            TCGA_predAUDRC_box_plot_twoClass(paper,cohort,df,sensitive,resistant,p_val,hyperparameter_folder_path)    
+    output_file = f"{hyperparameter_folder_path}/{paper}_BF{BF}_{cohort}_inference_result.txt"
+    with open(output_file, "w") as file:
+        if 'BCE' in criterion.loss_type :
+            for paper, metrics in paper_metrics.items():
+                file.write(f"\n{paper}\n")
+                file.write(f"BF_best_prob_threshold: {BF_best_prob_threshold} according to {metric}\n")
+                file.write(f"  test {criterion.loss_type}loss: {metrics[criterion.loss_type].item():.6f}\n")
+                for key in metrics_type_set:
+                    file.write(f"  '{key}': {metrics[key].item():.4f}\n")
+                for key in ["eval_targets","eval_outputs_before_final_activation_list","eval_outputs"]:
+                    file.write(f"\n{key}\n{metrics[key][0][:20]}\n\n")
+        else:
+            for paper, metrics in paper_metrics.items():
+                file.write(f"{paper}\n")
+                file.write(f"  test {criterion.loss_type}loss: {metrics[criterion.loss_type].item():.6f}\n")
+                if metrics['pvalue'].item() <= 0.05:
+                    file.write(f"\n pvalue <= 0.05 ")
+                else:
+                    file.write(f"\n pvalue > 0.05 ")
+                file.write(f"{paper} pvalue: {metrics['pvalue'].item():.4f}\n\n")
+                for key in ["eval_targets","eval_outputs_before_final_activation_list","eval_outputs"]:
+                    file.write(f"\n{key}\n{metrics[key][0][:20]}\n")       
+        os.chmod(output_file, 0o444)# Read-only
+        del model
+        torch.cuda.set_device("cuda:0")# Set the current device
+        gc.collect()# Optionally, force garbage collection to release memory 
+        torch.cuda.empty_cache() # Empty PyTorch cache
+        
+    # TCGA per drug performance     
+    label_df['predict_value'] = np.concatenate(predAUCwithUnknownGT)
+    label_df["predict_label"] = (label_df["predict_value"] > float(BF_best_prob_threshold)).astype(int)
 
-if paper == 'DeepCDR':
-    cancerType_ls=['CESC']
-    label_df["primary_disease"]='CESC'
-elif paper == 'DiSyn':
-    cancerType_ls=label_df["cancers"].unique().tolist()
-    label_df.rename(columns={'cancers': 'primary_disease'}, inplace=True)
-TP_df = label_df[(label_df["Label"] == 1) & (label_df["predict_label"] == 1)]
-TN_df = label_df[(label_df["Label"] == 0) & (label_df["predict_label"] == 0)]
-FP_df = label_df[(label_df["Label"] == 0) & (label_df["predict_label"] == 1)]
-FN_df = label_df[(label_df["Label"] == 1) & (label_df["predict_label"] == 0)]
-def count_by_drug(df, name):
-    return (df.groupby("drug_name").size().rename(name))
-def count_by_cancerType(df, name):
-    return (df.groupby("primary_disease").size().rename(name))
-drug_confusion = ( count_by_drug(TP_df, "TP").to_frame()
-             .join(count_by_drug(TN_df, "TN"), how="outer")
-             .join(count_by_drug(FP_df, "FP"), how="outer")
-             .join(count_by_drug(FN_df, "FN"), how="outer")
-             .fillna(0) .astype(int))
-cancerType_confusion = ( count_by_cancerType(TP_df, "TP").to_frame()
-                 .join(count_by_cancerType(TN_df, "TN"), how="outer")
-                 .join(count_by_cancerType(FP_df, "FP"), how="outer")
-                 .join(count_by_cancerType(FN_df, "FN"), how="outer")
-                 .fillna(0) .astype(int))
+    if paper == 'DeepCDR':
+        cancerType_ls=['CESC']
+        label_df["primary_disease"]='CESC'
+    elif paper == 'DAPL':
+        cancerType_ls=label_df["primary_disease"].unique().tolist()
+    elif paper == 'DiSyn':
+        cancerType_ls=label_df["cancers"].unique().tolist()
+        label_df.rename(columns={'cancers': 'primary_disease'}, inplace=True)
+    TP_df = label_df[(label_df["Label"] == 1) & (label_df["predict_label"] == 1)]
+    TN_df = label_df[(label_df["Label"] == 0) & (label_df["predict_label"] == 0)]
+    FP_df = label_df[(label_df["Label"] == 0) & (label_df["predict_label"] == 1)]
+    FN_df = label_df[(label_df["Label"] == 1) & (label_df["predict_label"] == 0)]
+    def count_by_drug(df, name):
+        return (df.groupby("drug_name").size().rename(name))
+    def count_by_cancerType(df, name):
+        return (df.groupby("primary_disease").size().rename(name))
+    drug_confusion = ( count_by_drug(TP_df, "TP").to_frame()
+                .join(count_by_drug(TN_df, "TN"), how="outer")
+                .join(count_by_drug(FP_df, "FP"), how="outer")
+                .join(count_by_drug(FN_df, "FN"), how="outer")
+                .fillna(0) .astype(int))
+    cancerType_confusion = ( count_by_cancerType(TP_df, "TP").to_frame()
+                    .join(count_by_cancerType(TN_df, "TN"), how="outer")
+                    .join(count_by_cancerType(FP_df, "FP"), how="outer")
+                    .join(count_by_cancerType(FN_df, "FN"), how="outer")
+                    .fillna(0) .astype(int))
 
-# 計算TCGA各個藥的metrics
-drugs_metrics={}
-tcga_drugs = drug_confusion.index.tolist()#取得 TCGA drug list
-for drug_name in tcga_drugs:
-    drugs_metrics[drug_name], _  = metrics_calculator(torch.tensor(label_df[label_df["drug_name"] == drug_name]['Label'].values), 
-                                                      torch.tensor(label_df[label_df["drug_name"] == drug_name]['predict_value'].values), 
-                                                      BF_best_prob_threshold, metric, dataset="test")
-tcga_perform_df = drug_confusion.join(pd.DataFrame(drugs_metrics).T.map(lambda x: x.item() if hasattr(x, 'item') else x))
-tcga_perform_df.to_csv(f"{hyperparameter_folder_path}/{paper}_{cohort}_perDrug_performance.csv", index=True, encoding='utf-8-sig')
+    # 計算TCGA各個藥的metrics
+    drugs_metrics={}
+    tcga_drugs = drug_confusion.index.tolist()#取得 TCGA drug list
+    for drug_name in tcga_drugs:
+        drugs_metrics[drug_name], _  = metrics_calculator(torch.tensor(label_df[label_df["drug_name"] == drug_name]['Label'].values), 
+                                                        torch.tensor(label_df[label_df["drug_name"] == drug_name]['predict_value'].values), 
+                                                        BF_best_prob_threshold, metric, dataset="test")
+    tcga_perform_df = drug_confusion.join(pd.DataFrame(drugs_metrics).T.map(lambda x: x.item() if hasattr(x, 'item') else x))
+    tcga_perform_df.to_csv(f"{hyperparameter_folder_path}/{paper}_{cohort}_perDrug_performance.csv", index=True, encoding='utf-8-sig')
 
-#plot Inference_Probability_Distribution
-Inference_Probability_Distribution( eval_outputs, eval_targets, float(BF_best_prob_threshold), hyperparameter_folder_path, cohort=f"TCGA-{paper}")
+    #plot Inference_Probability_Distribution
+    Inference_Probability_Distribution( eval_outputs, eval_targets, float(BF_best_prob_threshold), hyperparameter_folder_path, cohort=f"TCGA-{paper}")
 '''
     # CODEAE TCGA data inference
     drug_list=["cisplatin", "5-fluorouracil", "gemcitabine", "sorafenib", "temozolomide"]

@@ -61,3 +61,5 @@ utils/Smiles2MACCS.py
 utils/AttentionPooling.py
 inference.ipynb
 GDSC_inference.ipynb
+utils/MACCS.ipynb
+utils/map_broadID to CID.ipynb
