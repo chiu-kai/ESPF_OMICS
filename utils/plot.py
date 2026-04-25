@@ -31,7 +31,7 @@ def p_to_star(p):
         return 'n.s.'
 
 
-def Inference_Probability_Distribution(eval_outputs, eval_targets, best_prob_threshold, hyperparameter_folder_path, cohort):
+def Inference_Probability_Distribution(eval_outputs, eval_targets, best_prob_threshold, hyperparameter_folder_path, datasetName):
     logits = torch.concatenate(eval_outputs).detach().cpu().numpy()
     print("logits.shape: ", logits.shape)
     labels = torch.concatenate(eval_targets).detach().cpu().numpy()
@@ -54,7 +54,7 @@ def Inference_Probability_Distribution(eval_outputs, eval_targets, best_prob_thr
     ax.set_title("Probability Distribution")# P / Logits Distribution (before sigmoid)
     ax.legend()
     if hyperparameter_folder_path is not None:
-        output_file = os.path.join(hyperparameter_folder_path, f'{cohort}-Inference_Prob_Distribution.png')
+        output_file = os.path.join(hyperparameter_folder_path, f'{datasetName}-Inference_Prob_Distribution.png')
         try:
             output_file = get_unique_filename(output_file)
             fig.savefig(output_file)  
@@ -62,13 +62,13 @@ def Inference_Probability_Distribution(eval_outputs, eval_targets, best_prob_thr
         except Exception as e:
             print(f"⚠️ Failed to save figure: {e}")
             
-def TCGA_predAUDRC_box_plot_twoClass(drug_name,cohort,df,sensitive,resistant,p_val,hyperparameter_folder_path):
+def TCGA_predAUDRC_box_plot_twoClass(datasetName,df,sensitive,resistant,p_val,hyperparameter_folder_path):
     plt.rcParams["font.family"] = "serif"
     plt.rcParams['svg.fonttype'] = 'none'  # Use system fonts in SVG
     plt.rcParams['pdf.fonttype'] = 42  # Use Type 42 (TrueType) fonts
     fig, ax = plt.subplots(figsize=(6, 6))
     sns.boxplot(x='Label', y='predicted AUDRC', data=df, ax=ax, palette = {'0.0': 'red', '1.0': 'blue'})
-    ax.set_title(f"{drug_name} in {cohort}", fontsize=14, fontweight="bold")
+    ax.set_title(f"{datasetName}", fontsize=14, fontweight="bold")
     # p_text = f"p = {p_val:.4f}"
     p_text = p_to_star(p_val)
     x1, x2 = 0, 1
@@ -81,7 +81,7 @@ def TCGA_predAUDRC_box_plot_twoClass(drug_name,cohort,df,sensitive,resistant,p_v
     # ax.set_xlabel("Label", fontsize=14, fontweight="bold")
     ax.set_ylabel("Predicted AUDRC", fontsize=14, fontweight="bold" )
     plt.tight_layout()
-    output_file = os.path.join(hyperparameter_folder_path, f'TCGA_{drug_name}_predAUDRC_box_plot_twoClass.png')
+    output_file = os.path.join(hyperparameter_folder_path, f'{datasetName}_predAUDRC_box_plot_twoClass.png')
     try:
         output_file = get_unique_filename(output_file)
         fig.savefig(output_file)
@@ -280,18 +280,15 @@ def Density_Plot_of_AUC_Values(datasets,hyperparameter_folder_path=None):
     return plt
 
 
-def Confusion_Matrix_plot(datasets,hyperparameter_folder_path=None,drug=None):
+def Confusion_Matrix_plot(datasets,hyperparameter_folder_path=None,datasetName=None):
     plt.rcParams["font.family"] = "serif"
     if len(datasets)==1:
         fig, ax = plt.subplots(figsize=(11,11))
-        cm, title, color = datasets[0]
+        cm, color = datasets[0]
         sns.heatmap(cm, annot=True, fmt='d', annot_kws={"size": 40, "weight": "bold"}, 
                     cmap=color, cbar=False, vmin=0, vmax=max(cm.max() * 1.3, 1), linewidths=0,
                     xticklabels=["0", "1"], yticklabels=["0", "1"], ax=ax) # xticklabels=["Predicted  0", "Predicted  1"], yticklabels=["Actual  0", "Actual  1"]
-        if drug is not None:
-            ax.set_title(f'{drug}-{title} samples',fontsize=32, fontweight='bold')
-        else:
-            ax.set_title(f'{title} samples',fontsize=32, fontweight='bold')
+        ax.set_title(f'{datasetName} samples',fontsize=32, fontweight='bold')
         for spine in ax.spines.values():
             spine.set_visible(True)
             spine.set_linewidth(0.8)
@@ -304,7 +301,7 @@ def Confusion_Matrix_plot(datasets,hyperparameter_folder_path=None,drug=None):
         for label in ax.get_xticklabels() + ax.get_yticklabels():
             label.set_fontweight('bold')
         if hyperparameter_folder_path is not None:
-            output_file = os.path.join(hyperparameter_folder_path, f'{drug}-{title} Confusion_Matrix.png')
+            output_file = os.path.join(hyperparameter_folder_path, f'{datasetName} Confusion_Matrix.png')
             try:
                 output_file = get_unique_filename(output_file)
                 fig.savefig(output_file)
@@ -312,7 +309,7 @@ def Confusion_Matrix_plot(datasets,hyperparameter_folder_path=None,drug=None):
                 print(f"✅ Saved figure: {output_file}")
             except Exception as e:
                 print(f"⚠️ Failed to save figure: {e}")
-    else:
+    else: # CCLE train val test
         fig, axs = plt.subplots(1, 3, figsize=(13, 5))
         for i, (cm, title, color) in enumerate(datasets):
             sns.heatmap(cm, annot=True, fmt='d', annot_kws={"size": 16, "weight": "bold"}, 
@@ -344,11 +341,10 @@ def Confusion_Matrix_plot(datasets,hyperparameter_folder_path=None,drug=None):
                 print(f"⚠️ Failed to set permissions: {e}")
     return plt
 
-def tSNE_embed_plot(datasets,hyperparameter_folder_path=None,drug=None):
+def tSNE_embed_plot(tSNE_embed_list, eval_targets, hyperparameter_folder_path=None,datasetName=None):
     plt.rcParams["font.family"] = "serif"
     if len(datasets)==1:
         fig, ax = plt.subplots(figsize=(6,6))
-        tSNE_embed_list, eval_targets, title, color = datasets[0]
         features_np = np.concatenate(tSNE_embed_list, axis=0)
         labels_np = torch.concatenate(eval_targets).detach().cpu().numpy()
         print(f"tSNE Embed shape: {features_np.shape}, Labels shape: {labels_np.shape}")
@@ -363,7 +359,7 @@ def tSNE_embed_plot(datasets,hyperparameter_folder_path=None,drug=None):
         plt.setp(leg.get_title(), weight='bold')
         fig.tight_layout()
         if hyperparameter_folder_path is not None:
-            output_file = os.path.join(hyperparameter_folder_path, f'{drug}-{title} tSNE_Embedding.png')
+            output_file = os.path.join(hyperparameter_folder_path, f'{datasetName} tSNE_Embedding.png')
             try:
                 fig.savefig(output_file)
 #                 os.chmod(output_file, 0o444)
