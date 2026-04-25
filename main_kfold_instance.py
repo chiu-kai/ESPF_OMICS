@@ -88,8 +88,12 @@ for omic_type in include_omics:
     # print(f"{omic_type} tensor shape:", omics_data_tensor_dict[omic_type].shape)
     print(f"{omic_type} num_features",omics_numfeatures_dict[omic_type])
 
+if drug_pretrain_freeze_emb_path is not None:
+    with open(drug_pretrain_freeze_emb_path, 'rb') as f:
+        drug_df = pd.DataFrame(pickle.load(f)).sort_index(axis=0).sort_index(axis=1)
+else:
+    drug_df = pd.read_csv( drug_df_path, sep=',', index_col=0)
 
-drug_df = pd.read_csv( drug_df_path, sep=',', index_col=0)
 if one_drug is not None:
     drug_df = drug_df[drug_df['name'].str.lower() == one_drug.lower()]
 drug_df = drug_df.sort_index(axis=0).sort_index(axis=1)
@@ -187,7 +191,7 @@ set_seed(seed)
 def collate_fn(batch):
         gene_feature, drug_list, target = zip(*batch)
         return list(gene_feature), list(drug_list), list(target)
-test_dataset = InstanceResponseDataset(test_df, omics_data_dict, drug_df, drug_graph, include_omics, device)
+test_dataset = InstanceResponseDataset(test_df, omics_data_dict, drug_df, drug_graph, drug_pretrain_freeze_emb, include_omics, device)
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn) #, num_workers=4, pin_memory=True
 # k-fold run
 kfold_losses= {}

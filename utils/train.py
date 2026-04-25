@@ -122,9 +122,9 @@ def evaluation(model, eval_epoch_loss_W_penalty_ls, eval_epoch_loss_WO_penalty_l
             gene_list, drug_data_list, target_list = inputs # batch
             omics_tensor_dict = {omic: torch.stack([d[omic] for d in gene_list], dim=0) for omic in include_omics}
             target = torch.stack(target_list) # torch.Size([bsz, 1]) # bsz: batch size
-            if drug_graph is True:
+            if drug_graph is True and drug_pretrain_freeze_emb_pth is None:
                 drug = Batch.from_data_list(drug_data_list)
-            else:
+            elif drug_pretrain_freeze_emb_pth is not None:
                 drug = torch.stack(drug_data_list)
             model_output = model(omics_tensor_dict, drug, device, **kwargs) #drug.to(torch.float32)
             outputs = model_output[0]  # model_output[1] # model_output[2] # output.shape(n_sample, 1)
@@ -211,8 +211,10 @@ def train(model, optimizer,
             gene_list, drug_data_list, target_list = inputs # batch
             omics_tensor_dict = {omic: torch.stack([d[omic] for d in gene_list], dim=0) for omic in include_omics}
             target = torch.stack(target_list) # torch.Size([bsz, 1]) # bsz: batch size
-            if drug_graph is True:
+            if drug_graph is True and drug_pretrain_freeze_emb_pth is None:
                 drug = Batch.from_data_list(drug_data_list)
+            elif drug_pretrain_freeze_emb_pth is not None:
+                drug = torch.stack(drug_data_list)
             else:
                 drug = torch.stack(drug_data_list)
 

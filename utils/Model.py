@@ -884,9 +884,9 @@ class GIN_DCSA_model(nn.Module):
         
 # Drug GINConvNet
         self.GINConv = GINConvNet( drug_emb_dim, Graph_norm_type, Graph_nlayers, input_dim=78, GINconv_drop=0.2, pretrain_flag=False,)
-        if drug_pretrain_weight_path is not None:
+        if drug_pretrain_weight_path is not None and drug_pretrain_freeze_emb_path is None:
             self.GINConv.load_state_dict(torch.load(drug_pretrain_weight_path))  # 藥物模型預訓練權重
-        elif drug_pretrain_freeze_emb is True:
+        elif drug_pretrain_freeze_emb_path is not None:
             self.GINConv = nn.Identity()  # 如果不使用GINConv，直接將其替換為Identity，讓輸入直接傳遞到後續層
         else:
             self.GINConv.apply(self._init_weights)

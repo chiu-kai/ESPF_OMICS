@@ -8,14 +8,14 @@ from DAPL.dataprocess import smile_to_graph, cat_tensor_with_drug
 from torch_geometric.data import Data, Batch
 
 class InstanceResponseDataset(torch.utils.data.Dataset):
-    def __init__(self, response_df, expression_df, drug_smiles_df,drug_graph,include_omics, device):
+    def __init__(self, response_df, expression_df, drug_df,drug_graph,drug_pretrain_freeze_emb,include_omics, device):
         """
         response_df: 包含 DepMap_ID, DRUG_NAME, Class 的 dataframe
         expression_df: 索引為 DepMap_ID 的 expression 數值 dataframe
         drug_smiles_df: 索引為 DRUG_NAME 的 smiles 結構 dataframe (欄位 'SMILES')
         """
         self.response_df = response_df.reset_index(drop=True)
-        self.drug_smiles_df = drug_smiles_df
+        self.drug_df = drug_df
         self.include_omics = include_omics
         self.device = device
         # 預先建立 expression 查表字典：key 為 sample_id，value 為對應 tensor
@@ -28,31 +28,34 @@ class InstanceResponseDataset(torch.utils.data.Dataset):
                 self.expr_dict[omic_type][sample_id] = torch.tensor(expr, dtype=torch.float32).to(self.device)
         # 預先計算每個藥物的 graph，存入 dict
         self.drug_dict = {}
-        for drug_id in self.drug_smiles_df.index:
-            if drug_graph is True:
-                drug_smile = self.drug_smiles_df.loc[drug_id]['SMILES']
+        for drug_name in self.drug_df.index:
+            if drug_graph is True and drug_pretrain_freeze_emb is None:
+                drug_smile = self.drug_df.loc[drug_name]['SMILES']
                 c_size, atom_features_list, edge_index = smile_to_graph(drug_smile)# np.shape(edge_index)(54, 2)54個連線
                 drug_x = torch.tensor(np.array(atom_features_list), dtype=torch.float32)
                 drug_edge_index = torch.tensor(edge_index, dtype=torch.long).t().contiguous()# torch.Size([2, 54])
                 drug_data = Data(x=drug_x, edge_index=drug_edge_index)
-                self.drug_dict[drug_id.lower()] = drug_data.to(self.device)
+                self.drug_dict[drug_name.lower()] = drug_data.to(self.device)
+            elif drug_pretrain_freeze_emb is not None:
+                drug_encode = self.drug_df.loc[drug_name][drug_pretrain_freeze_emb]
+                self.drug_dict[drug_name.lower()] = torch.tensor(np.array(drug_encode), dtype=torch.float32).to(self.device)
             else:
-                drug_encode = self.drug_smiles_df.loc[drug_id]["drug_encode"]
-                self.drug_dict[drug_id.lower()] = torch.tensor(np.array(drug_encode), dtype=torch.long).to(self.device)
+                drug_encode = self.drug_df.loc[drug_name]["drug_encode"]
+                self.drug_dict[drug_name.lower()] = torch.tensor(np.array(drug_encode), dtype=torch.long).to(self.device)
 
     def __len__(self):
         return len(self.response_df)
     def __getitem__(self, idx):
         row = self.response_df.iloc[idx]
         sample_id = row['ModelID']
-        drug_id = row['drug_name'].lower()
+        drug_name = row['drug_name'].lower()
         target = float(row['Label'])
         # 從查表字典中直接取得 gene features
         gene_feature = {omic_type: self.expr_dict[omic_type][sample_id]
                              for omic_type in self.include_omics}
         # gene_feature = self.expr_dict[sample_id]
         # 從預先計算好的字典中取出對應的藥物 graph
-        drug_data = self.drug_dict[drug_id]
+        drug_data = self.drug_dict[drug_name]
         target = torch.tensor(target, dtype=torch.float32).to(self.device)
         return gene_feature, drug_data, target
 
