@@ -88,9 +88,10 @@ for omic_type in include_omics:
     # print(f"{omic_type} tensor shape:", omics_data_tensor_dict[omic_type].shape)
     print(f"{omic_type} num_features",omics_numfeatures_dict[omic_type])
 
-if drug_pretrain_freeze_emb_path is not None:
-    with open(drug_pretrain_freeze_emb_path, 'rb') as f:
+if drug_pretrain_freeze_emb_pth is not None:
+    with open(drug_pretrain_freeze_emb_pth, 'rb') as f:
         drug_df = pd.DataFrame(pickle.load(f)).sort_index(axis=0).sort_index(axis=1)
+    drug_df = drug_df.set_index("drug_name", drop=True)
 else:
     drug_df = pd.read_csv( drug_df_path, sep=',', index_col=0)
 
@@ -163,9 +164,13 @@ if ESPF is True:
     print("drug_encode",type(drug_df["drug_encode"]))
     drug_df["drug_encode"] = [i[:2] for i in drug_df["drug_encode"].values]
     # drug_features_tensor = torch.tensor(np.array([i[:2] for i in drug_encode.values]), dtype=torch.long).to(device)#drug_features_tensor = torch.tensor(np.array(drug_encode.values.tolist()), dtype=torch.long).to(device)
-else:
+elif ESPF is False and model_name == "Omics_DrugESPF_Model":
     drug_df["drug_encode"]=[list(map(int, item.split(','))) for item in drug_df["MACCS166bits"].values]
     # drug_features_tensor = torch.tensor(np.array(drug_encode_list), dtype=torch.long).to(device)
+elif drug_pretrain_freeze_emb is not None:
+    drug_df["drug_encode"] = drug_df[drug_pretrain_freeze_emb] 
+else:
+    pass
 #--------------------------------------------------------------------------------------------------------------------------
 num_ccl = list(omics_data_dict.values())[0].shape[0]
 num_drug = drug_df["drug_encode"].shape[0]
@@ -221,8 +226,8 @@ for fold, (train_idx, val_idx) in enumerate(split_generator):
     val_df = train_val_df.iloc[val_idx]
 
     set_seed(seed)
-    train_dataset = InstanceResponseDataset(train_df, omics_data_dict, drug_df, drug_graph, include_omics, device)
-    val_dataset = InstanceResponseDataset(val_df, omics_data_dict, drug_df, drug_graph, include_omics, device)
+    train_dataset = InstanceResponseDataset(train_df, omics_data_dict, drug_df, drug_graph, drug_pretrain_freeze_emb, include_omics, device)
+    val_dataset = InstanceResponseDataset(val_df, omics_data_dict, drug_df, drug_graph, drug_pretrain_freeze_emb, include_omics, device)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
 
