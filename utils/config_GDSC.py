@@ -38,7 +38,7 @@ TCGA_pretrain_weight_path_dict = None #{'Mut': "./results/Encoder_tcga_mut_1000_
                               # }
 seed = 42
 
-model_name = "GIN_DCSA_model" # Omics_DrugESPF_Model  Omics_DCSA_Model GIN_DCSA_model
+model_name = "GIN_DCSA_model" # Omics_DrugESPF_Model  OmicsESPF_DCSA_Model GIN_DCSA_model
 AUCtransform = None #"-log2"
 # samples splitType= 'byCCL' # byCCL byDrug 
 splitType= 'ModelID' # ModelID or drug_name or whole
@@ -59,6 +59,7 @@ DCSA = False # False True # Drug_Cell_SelfAttention
 drug_pretrain_weight_path = None # None / '../data/DAPL/share/pretrain/drug_encoder.pth'
 drug_pretrain_freeze_emb_pth = '../data/Drug_pretrain/SCAGE/gdsc_pretrain_latent.pkl' # None
 drug_pretrain_freeze_emb= "graph_token" # None / "graph_token" / "atom_mean"
+drug_pretrain_freeze_emb_MLP = False # True / False
 
 #------------------ESPF------------------
 ESPF = False # False True
@@ -86,19 +87,31 @@ if ESPF is True:
 elif ESPF is False:
     drug_encode_dims =[110,55,22] #MACCS166
     dense_layer_dim = sum(omics_encode_dim_dict[omic_type][len(omics_encode_dim_dict[omic_type])-1] for omic_type in include_omics) + drug_encode_dims[-1] # MLPDim
-if model_name == "Omics_DCSA_Model":
+if model_name == "OmicsESPF_DCSA_Model":
     drug_encode_dims = None
-    conc_dim = (max_drug_len+len(include_omics))*(drug_emb_dim+num_attention_heads)+ (len(include_omics)*drug_emb_dim)
+    conc_dim = (max_drug_len+len(include_omics))*(drug_emb_dim+num_attention_heads)+ (len(include_omics)*drug_emb_dim)# + ccl emb skip connection
     dense_layer_dim = [conc_dim, conc_dim//10, conc_dim//100, 1] #7064or3736
 if model_name == "GIN_DCSA_model":
     if DCSA is True:
-        drug_encode_dims = None
-        conc_dim = (1+len(include_omics))*(drug_emb_dim+num_attention_heads)+ (len(include_omics)*drug_emb_dim)
-        dense_layer_dim = [conc_dim, conc_dim//2, conc_dim//4, 1] # [208, 104,52, 1] #[conc_dim, conc_dim//2, conc_dim//2 , 1] (32+8)*2+32=112,56,28,1
+        if drug_pretrain_freeze_emb_MLP is True:
+            drug_encode_dims = [drug_emb_dim//2, drug_emb_dim//4] # 512->256->128
+            DCmatch_emb_dim = max(drug_encode_dims[-1], omics_encode_dim_dict['Exp'][-1]) #128
+            conc_dim = (1+len(include_omics))*(DCmatch_emb_dim+num_attention_heads)+ (len(include_omics)*DCmatch_emb_dim)# + ccl emb skip connection # (128+8)*2+128= 400
+            dense_layer_dim = [conc_dim, conc_dim, conc_dim//2, 1] # 400,400,200,1
+        else:
+            drug_encode_dims = None # 512 / 64
+            conc_dim = (1+len(include_omics))*(DCmatch_emb_dim+num_attention_heads)+ (len(include_omics)*DCmatch_emb_dim)# + ccl emb skip connection # (64+8)*2+64= 208 # (512+8)*2+512= 1040
+            dense_layer_dim = [conc_dim, conc_dim//2, conc_dim//4, 1] # [208, 104,52, 1] #(32+8)*2+32=112,56,28,1 # 1040,520,260,1
     elif DCSA is False:
-        drug_encode_dims = None
-        conc_dim = (1+len(include_omics))*drug_emb_dim # 32*2=64
-        dense_layer_dim = [conc_dim, conc_dim//2, conc_dim//4, 1] #[128, 64,32, 1] # [conc_dim, conc_dim, conc_dim, 1] 64
+        if drug_pretrain_freeze_emb_MLP is True:
+            drug_encode_dims = [drug_emb_dim//2, drug_emb_dim//4] # 512->256->128
+            DCmatch_emb_dim = max(drug_encode_dims[-1], omics_encode_dim_dict['Exp'][-1])
+            conc_dim = (1+len(include_omics))*DCmatch_emb_dim # 128*2=256
+            dense_layer_dim = [conc_dim, conc_dim, conc_dim//2, 1] #[256, 256, 128, 1] # 
+        else:
+            drug_encode_dims = None
+            conc_dim = (1+len(include_omics))*DCmatch_emb_dim # 512*2=1024
+            dense_layer_dim = [conc_dim, conc_dim//2, conc_dim//4, 1] #[1024, 512, 256, 1]  # [128,64,32,1]
 print("drug_encode_dims",drug_encode_dims)
 print("dense_layer_dim",dense_layer_dim)
 #需再修改-------------

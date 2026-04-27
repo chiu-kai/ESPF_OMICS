@@ -26,7 +26,7 @@ from scipy.stats import ttest_ind
 import time
 
 from utils.ESPF_drug2emb import drug2emb_encoder
-from utils.Model import Omics_DrugESPF_Model, Omics_DCSA_Model, GIN_DCSA_model
+from utils.Model import Omics_DrugESPF_Model, OmicsESPF_DCSA_Model, GIN_DCSA_model
 from utils.split_data_id import split_id,repeat_func
 from utils.create_dataloader import OmicsDrugDataset,InstanceResponseDataset
 from utils.train import train, evaluation
@@ -238,8 +238,8 @@ for fold, (train_idx, val_idx) in enumerate(split_generator):
         model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_emb_dim, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
                             n_layer,DA_Folder,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
-    elif model_name == "Omics_DCSA_Model":
-        model = Omics_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
+    elif model_name == "OmicsESPF_DCSA_Model":
+        model = OmicsESPF_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_emb_dim, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
                             n_layer,DA_Folder,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
     elif model_name == "GIN_DCSA_model":
@@ -479,8 +479,8 @@ if model_inference is True:
         model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_emb_dim, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
                             n_layer, DA_Folder, TCGA_pretrain_weight_path_dict= None)
-    elif model_name == "Omics_DCSA_Model":
-        model = Omics_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
+    elif model_name == "OmicsESPF_DCSA_Model":
+        model = OmicsESPF_DCSA_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_emb_dim, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
                             n_layer, DA_Folder, TCGA_pretrain_weight_path_dict= None)
     elif model_name == "GIN_DCSA_model":
@@ -558,7 +558,7 @@ for datasetName in datasetName_lst:
     print("num_ccl,num_drug: ",num_ccl,num_drug)
 # Fc1c[nH]c(=O)[nH]c1=O 
     set_seed(seed)
-    dataset = InstanceResponseDataset(label_df, omics_data_dict, drug_df, drug_graph, include_omics, device)
+    dataset = InstanceResponseDataset(label_df, omics_data_dict, drug_df, drug_graph, drug_pretrain_freeze_emb, include_omics, device)
     whole_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
     # eval_targets, eval_outputs,predAUCwithUnknownGT, AttenScorMat_DrugSelf, AttenScorMat_DrugCellSelf,eval_outputs_before_final_activation_list, mean_batch_eval_lossWOpenalty
     (eval_targets, eval_outputs,predAUCwithUnknownGT,
@@ -730,7 +730,7 @@ torch.cuda.empty_cache() # Empty PyTorch cache
 # Fc1c[nH]c(=O)[nH]c1=O 
 
         set_seed(seed)
-        dataset = InstanceResponseDataset(label_df, omics_data_dict, drug_df, drug_graph, include_omics, device)
+        dataset = InstanceResponseDataset(label_df, omics_data_dict, drug_df, drug_graph, drug_pretrain_freeze_emb, include_omics, device)
         onedrug_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
 
         # eval_targets, eval_outputs,predAUCwithUnknownGT, AttenScorMat_DrugSelf, AttenScorMat_DrugCellSelf,eval_outputs_before_final_activation_list, mean_batch_eval_lossWOpenalty
