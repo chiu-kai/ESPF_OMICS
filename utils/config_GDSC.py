@@ -38,7 +38,7 @@ TCGA_pretrain_weight_path_dict = None #{'Mut': "./results/Encoder_tcga_mut_1000_
                               # }
 seed = 42
 
-model_name = "GIN_DCSA_model" # Omics_DrugESPF_Model  OmicsESPF_DCSA_Model GIN_DCSA_model
+model_name = "GIN_DCSA_model" # Omics_ESPF_Model  OmicsESPF_DCSA_Model GIN_DCSA_model
 AUCtransform = None #"-log2"
 # samples splitType= 'byCCL' # byCCL byDrug 
 splitType= 'ModelID' # ModelID or drug_name or whole

@@ -26,7 +26,7 @@ from scipy.stats import ttest_ind
 import time
 
 from utils.ESPF_drug2emb import drug2emb_encoder
-from utils.Model import Omics_DrugESPF_Model, OmicsESPF_DCSA_Model, GIN_DCSA_model
+from utils.Model import Omics_ESPF_Model, OmicsESPF_DCSA_Model, GIN_DCSA_model
 from utils.split_data_id import split_id,repeat_func
 from utils.create_dataloader import OmicsDrugDataset,InstanceResponseDataset
 from utils.train import train, evaluation
@@ -164,7 +164,7 @@ if ESPF is True:
     print("drug_encode",type(drug_df["drug_encode"]))
     drug_df["drug_encode"] = [i[:2] for i in drug_df["drug_encode"].values]
     # drug_features_tensor = torch.tensor(np.array([i[:2] for i in drug_encode.values]), dtype=torch.long).to(device)#drug_features_tensor = torch.tensor(np.array(drug_encode.values.tolist()), dtype=torch.long).to(device)
-elif ESPF is False and model_name == "Omics_DrugESPF_Model":
+elif ESPF is False and model_name == "Omics_ESPF_Model":
     drug_df["drug_encode"]=[list(map(int, item.split(','))) for item in drug_df["MACCS166bits"].values]
     # drug_features_tensor = torch.tensor(np.array(drug_encode_list), dtype=torch.long).to(device)
 elif drug_pretrain_freeze_emb is not None:
@@ -234,8 +234,8 @@ for fold, (train_idx, val_idx) in enumerate(split_generator):
     # train
     # Init the neural network 
     set_seed(seed)
-    if model_name == "Omics_DrugESPF_Model":
-        model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
+    if model_name == "Omics_ESPF_Model":
+        model = Omics_ESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_emb_dim, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
                             n_layer,DA_Folder,TCGA_pretrain_weight_path_dict= TCGA_pretrain_weight_path_dict)
     elif model_name == "OmicsESPF_DCSA_Model":
@@ -475,8 +475,8 @@ with open(output_file, "w") as file:
     
 if model_inference is True:
     set_seed(seed)
-    if model_name == "Omics_DrugESPF_Model":
-        model = Omics_DrugESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
+    if model_name == "Omics_ESPF_Model":
+        model = Omics_ESPF_Model(omics_encode_dim_dict, drug_encode_dims, activation_func, activation_func_final, dense_layer_dim, device, ESPF, Drug_SelfAttention, pos_emb_type,
                             drug_emb_dim, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,
                             n_layer, DA_Folder, TCGA_pretrain_weight_path_dict= None)
     elif model_name == "OmicsESPF_DCSA_Model":
@@ -536,9 +536,14 @@ for datasetName in datasetName_lst:
         # print(f"{omic_type} tensor shape:", omics_data_tensor_dict[omic_type].shape)
         print(f"{omic_type} num_features",omics_numfeatures_dict[omic_type])
 
-    drug_df = pd.read_csv( drug_df_path, sep=',') # "../data/GDSC/GDSC_drug_merge_pubchem_dropNA_MACCS.csv"
-    drug_df['name'] = drug_df['name'].str.lower()
-    drug_df = drug_df.set_index('name', drop=False)
+    if drug_pretrain_freeze_emb_pth is not None:
+        with open(drug_pretrain_freeze_emb_pth, 'rb') as f:
+            drug_df = pd.DataFrame(pickle.load(f)).sort_index(axis=0).sort_index(axis=1)
+        drug_df = drug_df.set_index("drug_name", drop=True)
+    else:
+        drug_df = pd.read_csv( drug_df_path, sep=',') # "../data/GDSC/GDSC_drug_merge_pubchem_dropNA_MACCS.csv"
+        drug_df['name'] = drug_df['name'].str.lower()
+        drug_df = drug_df.set_index('name', drop=False)
     print(drug_df.shape)            
         
     if ESPF is True:
@@ -546,12 +551,14 @@ for datasetName in datasetName_lst:
         duplicate =  drug_df["SMILES"][drug_df["SMILES"].duplicated(keep=False)]
         vocab_path = "./ESPF/drug_codes_chembl_freq_1500.txt" # token
         sub_csv = pd.read_csv(ESPF_file)# token with frequency
-        # 將drug_smiles 使用_drug2emb_encoder function編碼成subword vector
         drug_df["drug_encode"] = pd.Series(drug_df["SMILES"]).apply(drug2emb_encoder, args=(vocab_path, sub_csv, max_drug_len))
-#             print("drug_encode",type(drug_df["drug_encode"]))
         drug_df["drug_encode"] = [i[:2] for i in drug_df["drug_encode"].values]
-    else:
+    elif ESPF is False and model_name == "Omics_ESPF_Model":
         drug_df["drug_encode"]=[list(map(int, item.split(','))) for item in drug_df["MACCS166bits"].values]
+    elif drug_pretrain_freeze_emb is not None:
+        drug_df["drug_encode"] = drug_df[drug_pretrain_freeze_emb] 
+    else:
+        pass
     #--------------------------------------------------------------------------------------------------------------------------
     num_ccl = list(omics_data_dict.values())[0].shape[0]
     num_drug = drug_df["drug_encode"].shape[0]

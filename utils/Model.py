@@ -1,4 +1,4 @@
-# Mut_Drug_Model、Omics_DrugESPF_Model
+# Mut_Drug_Model、Omics_ESPF_Model
 
 import torch
 import torch.nn as nn
@@ -405,10 +405,10 @@ def create_mlpEncoder(dimList, activation_func,drop=0.1):
 
 
 # Models------------------------------------------------------------------------------------------------------------------------------------------------------
-class Omics_DrugESPF_Model(nn.Module):
+class Omics_ESPF_Model(nn.Module):
     def __init__(self,omics_encode_dim_dict,drug_encode_dims, activation_func,activation_func_final,dense_layer_dim, device, ESPF, Drug_SelfAttention,
                  pos_emb_type, drug_emb_dim, intermediate_size, num_attention_heads , attention_probs_dropout_prob, hidden_dropout_prob, omics_numfeatures_dict, max_drug_len,n_layer,DA_Folder, TCGA_pretrain_weight_path_dict=None):
-        super(Omics_DrugESPF_Model, self).__init__()
+        super(Omics_ESPF_Model, self).__init__()
         self.n_layer = n_layer
 
         if DA_Folder != 'None':
