@@ -448,8 +448,8 @@ class Omics_ESPF_Model(nn.Module):
                     load_TCGA_pretrain_weight(self.MLP4omics_dict[omic_type], TCGA_pretrain_weight_path_dict[omic_type], device)
                 else: # Initialize weights with Kaiming uniform initialization, bias with aero
                     self._init_weights(self.MLP4omics_dict[omic_type])
-                self.cell_LN = nn.LayerNorm(omics_encode_dim_dict[omic_type][-1]) # LayerNorm for each omic type to make sure the scale of different omic features are similar when concatenate
-                self.cell_LN.apply(self._init_weights)
+        self.cell_LN = nn.LayerNorm(omics_encode_dim_dict[omic_type][-1]) # LayerNorm for each omic type to make sure the scale of different omic features are similar when concatenate
+        self.cell_LN.apply(self._init_weights)
 
 # Define subnetwork for drug ESPF features
         if ESPF is True:
@@ -602,9 +602,7 @@ class OmicsESPF_DCSA_Model(nn.Module):
             self.MLP4omics_dict = nn.ModuleDict()
             for omic_type in omics_numfeatures_dict.keys():
                 self.MLP4omics_dict[omic_type] = nn.Sequential(nn.Identity())  # just pass through the input, no linear combination no transformation
-                #apply a linear tranformation to omics embedding to match the hidden size of the drug
-                self.match_drug_dim = nn.Linear(omics_encode_dim_dict[omic_type][-1], drug_emb_dim)
-                self._init_weights(self.match_drug_dim)
+        
         else:
             def load_TCGA_pretrain_weight(model, pretrained_weights_path, device):
                 state_dict = torch.load(pretrained_weights_path, map_location=device)  # Load the state_dict
@@ -636,11 +634,11 @@ class OmicsESPF_DCSA_Model(nn.Module):
                 else: # Initialize weights with Kaiming uniform initialization, bias with aero
                     self._init_weights(self.MLP4omics_dict[omic_type])
 
-                #apply a linear tranformation to omics embedding to match the hidden size of the drug
-                self.match_drug_dim = nn.Linear(omics_encode_dim_dict[omic_type][-1], DCmatch_emb_dim)
-                self.cell_LN = nn.LayerNorm(DCmatch_emb_dim)
-                self.match_drug_dim.apply(self._init_weights)
-                self.cell_LN.apply(self._init_weights)
+        #apply a linear tranformation to omics embedding to match the hidden size of the drug
+        self.match_drug_dim = nn.Linear(omics_encode_dim_dict[omic_type][-1], DCmatch_emb_dim)
+        self.cell_LN = nn.LayerNorm(DCmatch_emb_dim)
+        self.match_drug_dim.apply(self._init_weights)
+        self.cell_LN.apply(self._init_weights)
         
 #ESPF            
         self.emb_f = Embeddings(drug_emb_dim,max_drug_len,hidden_dropout_prob, pos_emb_type,substructure_size = 2586)#(128,50,0.1,2586)
@@ -852,9 +850,6 @@ class GIN_DCSA_model(nn.Module):
             self.MLP4omics_dict = nn.ModuleDict()
             for omic_type in omics_numfeatures_dict.keys():
                 self.MLP4omics_dict[omic_type] = nn.Sequential( nn.Identity() )  # just pass through the input, no linear combination no transformation
-                #apply a linear tranformation to omics embedding to match the hidden size of the drug
-                self.match_drug_dim = nn.Linear(omics_encode_dim_dict[omic_type][-1], drug_emb_dim)
-                self.match_drug_dim.apply(self._init_weights)
         else:
             def load_TCGA_pretrain_weight(model, pretrained_weights_path, device):
                 state_dict = torch.load(pretrained_weights_path, map_location=device)  # Load the state_dict
@@ -877,11 +872,11 @@ class GIN_DCSA_model(nn.Module):
                 else: # Initialize weights with Kaiming uniform initialization, bias with aero
                     self.MLP4omics_dict[omic_type].apply(self._init_weights)
 
-                #apply a linear tranformation to omics embedding to match the hidden size of the drug
-                self.match_drug_dim = nn.Linear(omics_encode_dim_dict[omic_type][-1], DCmatch_emb_dim)
-                self.cell_LN = nn.LayerNorm(DCmatch_emb_dim)
-                self.match_drug_dim.apply(self._init_weights)
-                self.cell_LN.apply(self._init_weights)
+        #apply a linear tranformation to omics embedding to match the hidden size of the drug
+        self.match_drug_dim = nn.Linear(omics_encode_dim_dict[omic_type][-1], DCmatch_emb_dim)
+        self.cell_LN = nn.LayerNorm(DCmatch_emb_dim)
+        self.match_drug_dim.apply(self._init_weights)
+        self.cell_LN.apply(self._init_weights)
         
 # Drug GINConvNet
         self.GINConv = GINConvNet( drug_emb_dim, Graph_norm_type, Graph_nlayers, input_dim=78, GINconv_drop=0.2, pretrain_flag=False,)
@@ -910,7 +905,7 @@ class GIN_DCSA_model(nn.Module):
 
  
 # Drug_Cell_SelfAttention
-        self.Drug_Cell_SelfAttention = TransformerEncoder_MultipleLayers(drug_emb_dim+num_attention_heads, intermediate_size, num_attention_heads,attention_probs_dropout_prob, hidden_dropout_prob, n_layer)#(128+8,512,8,0.1,0.1)
+        self.Drug_Cell_SelfAttention = TransformerEncoder_MultipleLayers(DCmatch_emb_dim+num_attention_heads, intermediate_size, num_attention_heads,attention_probs_dropout_prob, hidden_dropout_prob, n_layer)#(128+8,512,8,0.1,0.1)
 
 # Define the final prediction network 
         self.model_final_add = nn.Sequential(
@@ -949,13 +944,13 @@ class GIN_DCSA_model(nn.Module):
         for omic_type, omic_tensor in omics_tensor_dict.items():
             omic_embed = self.MLP4omics_dict[omic_type](omic_tensor)# .to(device=device)
             #apply a linear tranformation to omics embedding to match the hidden size of the drug
-            omic_embed = self.match_drug_dim(omic_embed) #(bsz, drug_emb_dim)
+            omic_embed = self.match_drug_dim(omic_embed) #(bsz, DCmatch_emb_dim)
             omic_embed = self.cell_LN(omic_embed) # LayerNorm for each omic type to make sure the scale of different omic features are similar when concatenate
             omic_embed = activation_func(omic_embed)
             omic_embeddings_ls.append(omic_embed)
         
         Drug_graph_feat = self.GINConv(drug) # Drug_graph_feat(bsz, drug_emb_dim)
-        Drug_graph_feat = self.match_cell_dim(Drug_graph_feat) # match Drug_graph_feat to drug_emb_dim
+        Drug_graph_feat = self.match_cell_dim(Drug_graph_feat) # match Drug_graph_feat to DCmatch_emb_dim
         Drug_graph_feat = self.drug_LN(Drug_graph_feat) # LayerNorm for the drug embedding
         Drug_graph_feat = activation_func(Drug_graph_feat)
 
@@ -967,26 +962,26 @@ class GIN_DCSA_model(nn.Module):
     # mask for Drug Cell SelfAttention
             DrugCell_mask = torch.ones(Drug_graph_feat.size(0), 1+len(omic_embeddings_ls), dtype=Drug_graph_feat.dtype, device=Drug_graph_feat.device)  # Shape: [bsz, 1+len(omic_embeddings_ls)]
 
-            omic_embeddings = torch.stack(omic_embeddings_ls, dim=1) #shape:[bsz,c,drug_emb_dim] #Stack omic_embeddings_ls along the second dimension, c: number of omic types
+            omic_embeddings = torch.stack(omic_embeddings_ls, dim=1) #shape:[bsz,c,DCmatch_emb_dim] #Stack omic_embeddings_ls along the second dimension, c: number of omic types
             Drug_graph_feat = Drug_graph_feat.unsqueeze(1)  # Add a dimension to match the shape of omic_embeddings
-            append_embeddings = torch.cat([Drug_graph_feat, omic_embeddings], dim=1) #shape:[bsz,1+c,drug_emb_dim] #Concatenate along the second dimension
+            append_embeddings = torch.cat([Drug_graph_feat, omic_embeddings], dim=1) #shape:[bsz,1+c,DCmatch_emb_dim] #Concatenate along the second dimension
             
     # Type encoding (to distinguish between drug and omics)
             drug_type_encoding = torch.ones_like(Drug_graph_feat[..., :1])  # Shape: [bsz, 1, 1]
             omics_type_encoding = torch.zeros_like(omic_embeddings[..., :1])  # Shape: [bsz, c, 1]
     # Concatenate type encoding with the respective data
-            Drug_graph_feat = torch.cat([Drug_graph_feat, drug_type_encoding], dim=-1)  # Shape: [bsz, 1, drug_emb_dim+1]
-            omic_embeddings = torch.cat([omic_embeddings, omics_type_encoding], dim=-1)  # Shape: [bsz, c, drug_emb_dim+1]
+            Drug_graph_feat = torch.cat([Drug_graph_feat, drug_type_encoding], dim=-1)  # Shape: [bsz, 1, DCmatch_emb_dim+1]
+            omic_embeddings = torch.cat([omic_embeddings, omics_type_encoding], dim=-1)  # Shape: [bsz, c, DCmatch_emb_dim+1]
     # Final concatenated tensor (drug sequence and omics data with type encoding)
-            append_embeddings = torch.cat([Drug_graph_feat, omic_embeddings], dim=1)  # Shape: [bsz, 1+c, drug_emb_dim+1]
+            append_embeddings = torch.cat([Drug_graph_feat, omic_embeddings], dim=1)  # Shape: [bsz, 1+c, DCmatch_emb_dim+1]
 
 
             padding_dim = self.num_attention_heads - 1  # Extra dimensions to add # padding_dim=7
             pad = torch.zeros(append_embeddings.size(0), append_embeddings.size(1), padding_dim, device=append_embeddings.device)
-            append_embeddings = torch.cat([append_embeddings, pad], dim=-1)  # New shape: [bsz, 1+c, drug_emb_dim+8]
+            append_embeddings = torch.cat([append_embeddings, pad], dim=-1)  # New shape: [bsz, 1+c, DCmatch_emb_dim+8]
     # self.Drug_Cell_SelfAttention
             append_embeddings, AttenScorMat_DrugCellSelf  = self.Drug_Cell_SelfAttention(append_embeddings, DrugCell_mask)# DrugCell_mask.shape: torch.Size([bsz, 1+c]) # GraphDrug+EXP=2
-            # append_embeddings: torch.Size([bsz, 1+c, drug_emb_dim+8]) # AttenScorMat_DrugCellSelf:torch.Size([bsz, 8, 1+c, 1+c])(without dropout)
+            # append_embeddings: torch.Size([bsz, 1+c, DCmatch_emb_dim+8]) # AttenScorMat_DrugCellSelf:torch.Size([bsz, 8, 1+c, 1+c])(without dropout)
             """需要所有層時，才手動計算
             append_embeddings_all_layer, AttenScorMat_DrugCellSelf_all_layer = self.Drug_Cell_SelfAttention.compute_all_layers(append_embeddings, DrugCell_mask)    
             AttenScorMat_DrugCellSelf = AttenScorMat_DrugCellSelf_all_layer[self.n_layer -1]
@@ -994,15 +989,15 @@ class GIN_DCSA_model(nn.Module):
             """
             #skip connect the omics embeddings # not as necessary as skip connect the drug embeddings 
             append_embeddings = torch.cat([ torch.cat(omic_embeddings_ls, dim=1), append_embeddings.reshape(append_embeddings.size(0), -1)], dim=1) # dim=1: turn into 1D 
-            #omic_embeddings_ls(bsz, c, drug_emb_dim) + append_embeddings(bsz, 1+c, drug_emb_dim+8) => (bsz, (1+c)*(drug_emb_dim+8) + c*drug_emb_dim )
+            #omic_embeddings_ls(bsz, c, DCmatch_emb_dim) + append_embeddings(bsz, 1+c, DCmatch_emb_dim+8) => (bsz, (1+c)*(DCmatch_emb_dim+8) + c*DCmatch_emb_dim )
         elif DCSA is False:
             if self.print_flag is True:
                 print("\n DCSA is False \n")
                 self.print_flag  = False
             append_embeddings = torch.cat([ torch.cat(omic_embeddings_ls, dim=1), Drug_graph_feat], dim=1)
-            # Drug_graph_feat:torch.Size([bsz, drug_emb_dim])
-            # torch.cat(omic_embeddings_ls, dim=1):torch.Size([bsz, drug_emb_dim])
-            # append_embeddings:torch.Size([bsz, c*drug_emb_dim + drug_emb_dim])
+            # Drug_graph_feat:torch.Size([bsz, DCmatch_emb_dim])
+            # torch.cat(omic_embeddings_ls, dim=1):torch.Size([bsz, DCmatch_emb_dim])
+            # append_embeddings:torch.Size([bsz, c*DCmatch_emb_dim + DCmatch_emb_dim])
 # Final MLP
         output_before_final_activation = self.model_final_add[:-1](append_embeddings)
         output = self.model_final_add[-1](output_before_final_activation)
