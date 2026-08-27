@@ -15,6 +15,10 @@ import importlib.util
 # 設定命令列引數
 parser = argparse.ArgumentParser(description="import config to main")
 parser.add_argument("--config", required=True, help="Path to the config.py file")
+parser.add_argument("--path", type=str, required=False, help="best_weight_path")
+parser.add_argument("--threshold", type=str, required=False, help="best_prob_threshold")
+parser.add_argument("--BF", type=str, required=False, help="best_fold")
+
 args = parser.parse_args()
 # 動態載入 config.py
 spec = importlib.util.spec_from_file_location("config", args.config)
@@ -24,6 +28,13 @@ spec.loader.exec_module(config)
 for key, value in vars(config).items():
     if not key.startswith("_"):  # 過濾內部變數，例如 __builtins__
         globals()[key] = value
+        
+if args.path is not None:
+    best_weight_path = f'./results/{args.path}/'
+    best_prob_threshold = float(args.threshold)
+    BF = int(args.BF)
+else:
+    print("Skipping argument, using config.")
 
 class GradientNormTracker:
     def __init__(self, batch_size,check_frequency=10, enable_plot=True):

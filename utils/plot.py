@@ -30,7 +30,53 @@ def p_to_star(p):
     else:
         return 'n.s.'
 
+def barplot_perdrug_performance(dataset_drugs, drugs_metrics, datasetName, hyperparameter_folder_path):
+    # 1. 資料處理：依 AUROC 降序排序
+    dataset_drugs = sorted(dataset_drugs, key=lambda d: float(drugs_metrics[d]["AUROC"]), reverse=True)
+    auroc_values = [float(drugs_metrics[d]["AUROC"]) for d in dataset_drugs]
+    auprc_values = [float(drugs_metrics[d]["AUPRC"]) for d in dataset_drugs]
+    
+    n = len(dataset_drugs)
+    is_large = n >= 30
+    # 2. 根據資料量設定參數
+#     palette = sns.color_palette("husl" if is_large else "tab20", n)
+    base_palette  = sns.color_palette("husl" if is_large else "tab20", n)
+    drug2color = {drug: base_palette[i % len(base_palette)] 
+              for i, drug in enumerate(sorted(dataset_drugs))}
+    colors = [drug2color[d] for d in dataset_drugs]
+    figsize = (18, 18) if is_large else (max(14, n * 0.8), 18)
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize, sharex=False)
+    # 3. 定義子繪圖邏輯（內部函式）以消除重複
+    def plot_metric(ax, y_values, label, is_top=False):
+        sns.barplot(x=dataset_drugs, y=y_values, palette=colors, alpha=0.85, ax=ax, hue=dataset_drugs, legend=False)
+        ax.set_ylabel(label, fontsize=25)
+        if is_top:
+            ax.set_title(f"{datasetName} per Drug AUROC & AUPRC", fontsize=30)
+        # 設定座標軸樣式
+        ax.set_ylim(0, 1.0)
+        ax.yaxis.set_major_locator(plt.MultipleLocator(0.05))
+        ax.set_axisbelow(True)
+        ax.tick_params(axis="y", labelsize=20)
+        ax.yaxis.grid(True, linestyle="--", alpha=0.8, color="gray")
+        ax.set_xticklabels(dataset_drugs, rotation=45, ha="right", fontsize=20)
+        # 繪製數值文字 (利用 patches)
+        for bar, val in zip(ax.patches, y_values):
+            ax.text(bar.get_x() + bar.get_width()/2, 0.01,
+                    f"{val:.4f}", va="bottom", ha="center", 
+                    fontsize=20, color="black", rotation=90)
+    plot_metric(ax1, auroc_values, "AUROC", is_top=True)
+    plot_metric(ax2, auprc_values, "AUPRC")
 
+    plt.tight_layout()
+    if hyperparameter_folder_path is not None:
+        output_file = os.path.join(hyperparameter_folder_path, f"{datasetName}_perDrug_performance.png")   
+        try:
+            output_file = get_unique_filename(output_file)
+            fig.savefig(output_file, bbox_inches="tight")  
+            print(f"✅ Saved figure: {output_file}")
+        except Exception as e:
+            print(f"⚠️ Failed to save figure: {e}")
+    
 def Inference_Probability_Distribution(eval_outputs, eval_targets, best_prob_threshold, hyperparameter_folder_path, datasetName):
     logits = torch.concatenate(eval_outputs).detach().cpu().numpy()
     print("logits.shape: ", logits.shape)

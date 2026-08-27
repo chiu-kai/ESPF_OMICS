@@ -31,13 +31,17 @@ from utils.split_data_id import split_id,repeat_func
 from utils.create_dataloader import OmicsDrugDataset,InstanceResponseDataset
 from utils.train import train, evaluation
 from utils.correlation import correlation_func
-from utils.plot import Inference_Probability_Distribution, loss_curve, correlation_density, Density_Plot_of_AUC_Values, Confusion_Matrix_plot, TCGA_predAUDRC_box_plot_twoClass
+from utils.plot import barplot_perdrug_performance, Inference_Probability_Distribution, loss_curve, correlation_density, Density_Plot_of_AUC_Values, Confusion_Matrix_plot, TCGA_predAUDRC_box_plot_twoClass
 from utils.tools import get_data_value_range,set_seed,get_vram_usage
 print("*"*100)
 
 # 設定命令列引數
 parser = argparse.ArgumentParser(description="import config to main")
 parser.add_argument("--config", required=True, help="Path to the config.py file")
+parser.add_argument("--path", type=str, required=False, help="best_weight_path")
+parser.add_argument("--threshold", type=str, required=False, help="best_prob_threshold")
+parser.add_argument("--BF", type=str, required=False, help="best_fold")
+
 args = parser.parse_args()
 # 動態載入 config.py
 spec = importlib.util.spec_from_file_location("config", args.config)
@@ -47,6 +51,13 @@ spec.loader.exec_module(config)
 for key, value in vars(config).items():
     if not key.startswith("_"):  # 過濾內部變數，例如 __builtins__
         globals()[key] = value
+        
+if args.path is not None:
+    best_weight_path = f'./results/{args.path}/'
+    best_prob_threshold = float(args.threshold)
+    BF = int(args.BF)
+else:
+    print("Skipping argument, using config.")
 
 # information
 struct_time   = time.localtime()
@@ -164,7 +175,7 @@ if ESPF is True:
     print("drug_encode",type(drug_df["drug_encode"]))
     drug_df["drug_encode"] = [i[:2] for i in drug_df["drug_encode"].values]
     # drug_features_tensor = torch.tensor(np.array([i[:2] for i in drug_encode.values]), dtype=torch.long).to(device)#drug_features_tensor = torch.tensor(np.array(drug_encode.values.tolist()), dtype=torch.long).to(device)
-elif ESPF is False and model_name == "Omics_ESPF_Model":
+elif ESPF is False and model_name == "Omics_ESPF_Model"or model_name == "GIN_DCSA_model": # 直接用MACCS166bits當drug feature  
     drug_df["drug_encode"]=[list(map(int, item.split(','))) for item in drug_df["MACCS166bits"].values]
     # drug_features_tensor = torch.tensor(np.array(drug_encode_list), dtype=torch.long).to(device)
 elif drug_pretrain_freeze_emb is not None:
@@ -491,33 +502,40 @@ if model_inference is True:
     model.to(device=device)
     model.load_state_dict(BF_best_weight) 
 
-paper_lst = ['DiSyn', 'DAPL']  # ['DeepCDR', 'DiSyn', 'DAPL']  
-cohort = "TCGA" # PDX / TCGA / I-SPY2
-datasetName_lst = ['TCGA_DiSyn', 'TCGA_DAPL']  # ['TCGA_DeepCDR', 'TCGA_DiSyn', 'TCGA_DAPL', 'PDX_DiSyn', 'PDX_DAPL', 'I-SPY2_DiSyn']
+
+datasetName_lst = ['TCGA_TransDRP','TCGA_DiSyn', 'TCGA_DAPL', 'TCGA_DeepCDR', 'PDX_DAPL']  # ['TCGA_DeepCDR', 'TCGA_DiSyn', 'TCGA_DAPL', 'PDX_DiSyn', 'PDX_DAPL', 'I-SPY2_DiSyn']
 # 集中管理各 paper 的路徑
 paths = {
+    'TCGA_TransDRP': {'label': "../data/TCGA/TransDRP TCGA drug response samples.csv",
+              'exp': "../data/TCGA/TCGA TransDRP samples EXP1426 rmdup.csv",
+              'DA': f"../data/DAPL/share/pretrain/{DA_Folder}/tcga_latent_results_TransDRP_rmdup.csv"},
     'TCGA_DiSyn': {'label': "../data/TCGA/DiSyn TCGA drug response match exp file samples.csv",
               'exp': "../data/TCGA/TCGA DiSyn samples EXP1426.csv",
               'DA': f"../data/DAPL/share/pretrain/{DA_Folder}/tcga_latent_results_DiSyn_rmdup.csv"},
     'TCGA_DAPL': {'label': "../data/DAPL/share/TCGA_fromDAPL/TCGA_drug_response_from_DAPL.csv",
-             'exp': "../data/DAPL/share/TCGA_fromDAPL/TCGA_EXP1246_from_DAPL.csv",
+             'exp': "../data/DAPL/share/TCGA_fromDAPL/TCGA_EXP1426_from_DAPL.csv",
              'DA': f"../data/DAPL/share/pretrain/{DA_Folder}/tcga_latent_results_DAPL_rmdup.csv"},
     'TCGA_DeepCDR': {'label': "../data/TCGA/TCGA DeepCDR samples.csv",
-                'exp': "../data/TCGA/TCGA DeepCDR samples EXP1426.csv"}
+                'exp': "../data/TCGA/TCGA DeepCDR samples EXP1426.csv"},
+    'PDX_DAPL': {'label': "../data/DAPL/share/PDTC_fromDAPL/PDX_drug_response_from_DAPL.csv",
+             'exp': "../data/DAPL/share/PDTC_fromDAPL/pdtc_uq1000_feature.csv"},
 }
 for datasetName in datasetName_lst:
 
     label_df_pth = paths[datasetName]['label']
     EXP_pth = paths[datasetName]['exp'] 
     DA_EXP_pth = paths[datasetName].get('DA', 'None') # 如果沒有DA路徑，則設為'None'
-
+    
+    if DA_Folder != 'None' and DA_EXP_pth == 'None':
+        print(f"Skipping {datasetName}: no DA path available.")# 若 DA_Folder 不為 'None' 但該 dataset 沒有 DA 路徑，則跳過
+        continue
     if DA_Folder != 'None':
         CohortExp_df = pd.read_csv(DA_EXP_pth, sep=',', index_col=0)
     else:
         CohortExp_df = pd.read_csv(EXP_pth, sep=',', index_col=0) #1426
         
     label_df = pd.read_csv(label_df_pth, sep=',')
-    label_df.columns.values[0] = 'ModelID'
+    label_df.rename(columns={label_df.columns[0]: "ModelID"}, inplace=True)
     label_df['drug_name'] = label_df['drug_name'].str.lower() # match the drug name in drug_df
     CohortExp_df = CohortExp_df.sort_index(axis=0).sort_index(axis=1)
     print(f"{datasetName} exp data",CohortExp_df.shape)
@@ -553,7 +571,7 @@ for datasetName in datasetName_lst:
         sub_csv = pd.read_csv(ESPF_file)# token with frequency
         drug_df["drug_encode"] = pd.Series(drug_df["SMILES"]).apply(drug2emb_encoder, args=(vocab_path, sub_csv, max_drug_len))
         drug_df["drug_encode"] = [i[:2] for i in drug_df["drug_encode"].values]
-    elif ESPF is False and model_name == "Omics_ESPF_Model":
+    elif ESPF is False and model_name == "Omics_ESPF_Model"or model_name == "GIN_DCSA_model": # 直接用MACCS166bits當drug feature  
         drug_df["drug_encode"]=[list(map(int, item.split(','))) for item in drug_df["MACCS166bits"].values]
     elif drug_pretrain_freeze_emb is not None:
         drug_df["drug_encode"] = drug_df[drug_pretrain_freeze_emb] 
@@ -631,14 +649,14 @@ for datasetName in datasetName_lst:
     label_df['predict_value'] = np.concatenate(predAUCwithUnknownGT)
     label_df["predict_label"] = (label_df["predict_value"] > float(BF_best_prob_threshold)).astype(int)
 
-    if datasetName == 'TCGA_DeepCDR':
-        cancerType_ls=['CESC']
-        label_df["primary_disease"]='CESC'
-    elif datasetName == 'TCGA_DAPL':
-        cancerType_ls=label_df["primary_disease"].unique().tolist()
-    elif datasetName == 'TCGA_DiSyn':
-        cancerType_ls=label_df["cancers"].unique().tolist()
-        label_df.rename(columns={'cancers': 'primary_disease'}, inplace=True)
+    # if datasetName == 'TCGA_DeepCDR':
+    #     cancerType_ls=['CESC']
+    #     label_df["primary_disease"]='CESC'
+    # elif datasetName == 'TCGA_DAPL':
+    #     cancerType_ls=label_df["primary_disease"].unique().tolist()
+    # elif datasetName == 'TCGA_DiSyn':
+    #     cancerType_ls=label_df["cancers"].unique().tolist()
+    #     label_df.rename(columns={'cancers': 'primary_disease'}, inplace=True)
     TP_df = label_df[(label_df["Label"] == 1) & (label_df["predict_label"] == 1)]
     TN_df = label_df[(label_df["Label"] == 0) & (label_df["predict_label"] == 0)]
     FP_df = label_df[(label_df["Label"] == 0) & (label_df["predict_label"] == 1)]
@@ -647,16 +665,16 @@ for datasetName in datasetName_lst:
         return (df.groupby("drug_name").size().rename(name))
     def count_by_cancerType(df, name):
         return (df.groupby("primary_disease").size().rename(name))
-    drug_confusion = ( count_by_drug(TP_df, "TP").to_frame()
+    drug_confusion = ( count_by_drug(TP_df, "TP").to_frame() # create a new DataFrame with the counts of TP, TN, FP, FN for each drug
                 .join(count_by_drug(TN_df, "TN"), how="outer")
                 .join(count_by_drug(FP_df, "FP"), how="outer")
                 .join(count_by_drug(FN_df, "FN"), how="outer")
                 .fillna(0) .astype(int))
-    cancerType_confusion = ( count_by_cancerType(TP_df, "TP").to_frame()
-                    .join(count_by_cancerType(TN_df, "TN"), how="outer")
-                    .join(count_by_cancerType(FP_df, "FP"), how="outer")
-                    .join(count_by_cancerType(FN_df, "FN"), how="outer")
-                    .fillna(0) .astype(int))
+    # cancerType_confusion = ( count_by_cancerType(TP_df, "TP").to_frame() # create a new DataFrame with the counts of TP, TN, FP, FN for each cancer type
+    #                 .join(count_by_cancerType(TN_df, "TN"), how="outer")
+    #                 .join(count_by_cancerType(FP_df, "FP"), how="outer")
+    #                 .join(count_by_cancerType(FN_df, "FN"), how="outer")
+    #                 .fillna(0) .astype(int))
 
     # 計算dataset各個藥的metrics
     drugs_metrics={}
@@ -667,9 +685,11 @@ for datasetName in datasetName_lst:
                                                         BF_best_prob_threshold, metric, dataset=datasetName)
     dataset_perform_df = drug_confusion.join(pd.DataFrame(drugs_metrics).T.map(lambda x: x.item() if hasattr(x, 'item') else x))
     dataset_perform_df.to_csv(f"{hyperparameter_folder_path}/{datasetName}_perDrug_performance.csv", index=True, encoding='utf-8-sig')
+    barplot_perdrug_performance(dataset_drugs, drugs_metrics, datasetName,hyperparameter_folder_path)
 
     #plot Inference_Probability_Distribution
     Inference_Probability_Distribution( eval_outputs, eval_targets, float(BF_best_prob_threshold), hyperparameter_folder_path, datasetName)
+
 del model
 torch.cuda.set_device("cuda:0")# Set the current device
 gc.collect()# Optionally, force garbage collection to release memory 

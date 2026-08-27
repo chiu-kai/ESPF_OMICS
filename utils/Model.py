@@ -16,6 +16,10 @@ import importlib.util
 # 設定命令列引數
 parser = argparse.ArgumentParser(description="import config to main")
 parser.add_argument("--config", required=True, help="Path to the config.py file")
+parser.add_argument("--path", type=str, required=False, help="best_weight_path")
+parser.add_argument("--threshold", type=str, required=False, help="best_prob_threshold")
+parser.add_argument("--BF", type=str, required=False, help="best_fold")
+
 args = parser.parse_args()
 # 動態載入 config.py
 spec = importlib.util.spec_from_file_location("config", args.config)
@@ -25,6 +29,13 @@ spec.loader.exec_module(config)
 for key, value in vars(config).items():
     if not key.startswith("_"):  # 過濾內部變數，例如 __builtins__
         globals()[key] = value
+        
+if args.path is not None:
+    best_weight_path = f'./results/{args.path}/'
+    best_prob_threshold = float(args.threshold)
+    BF = int(args.BF)
+else:
+    print("Skipping argument, using config.")
 
 torch.manual_seed(42)
 np.random.seed(42)
@@ -417,6 +428,8 @@ class Omics_ESPF_Model(nn.Module):
                 self.MLP4omics_dict[omic_type] = nn.Sequential(
                     nn.Identity()  # just pass through the input, no linear combination no transformation
                 )
+                self.cell_LN = nn.LayerNorm(omics_encode_dim_dict[omic_type][-1]) # LayerNorm for each omic type to make sure the scale of different omic features are similar when concatenate
+                self.cell_LN.apply(self._init_weights)
         else:    
             def load_TCGA_pretrain_weight(model, pretrained_weights_path, device):
                 state_dict = torch.load(pretrained_weights_path, map_location=device)  # Load the state_dict
@@ -448,8 +461,8 @@ class Omics_ESPF_Model(nn.Module):
                     load_TCGA_pretrain_weight(self.MLP4omics_dict[omic_type], TCGA_pretrain_weight_path_dict[omic_type], device)
                 else: # Initialize weights with Kaiming uniform initialization, bias with aero
                     self._init_weights(self.MLP4omics_dict[omic_type])
-        self.cell_LN = nn.LayerNorm(omics_encode_dim_dict[omic_type][-1]) # LayerNorm for each omic type to make sure the scale of different omic features are similar when concatenate
-        self.cell_LN.apply(self._init_weights)
+                self.cell_LN = nn.LayerNorm(omics_encode_dim_dict[omic_type][-1]) # LayerNorm for each omic type to make sure the scale of different omic features are similar when concatenate
+                self.cell_LN.apply(self._init_weights)
 
 # Define subnetwork for drug ESPF features
         if ESPF is True:
@@ -602,7 +615,9 @@ class OmicsESPF_DCSA_Model(nn.Module):
             self.MLP4omics_dict = nn.ModuleDict()
             for omic_type in omics_numfeatures_dict.keys():
                 self.MLP4omics_dict[omic_type] = nn.Sequential(nn.Identity())  # just pass through the input, no linear combination no transformation
-        
+                #apply a linear tranformation to omics embedding to match the hidden size of the drug
+                self.match_drug_dim = nn.Linear(omics_encode_dim_dict[omic_type][-1], DCmatch_emb_dim)
+                self.match_drug_dim.apply(self._init_weights)
         else:
             def load_TCGA_pretrain_weight(model, pretrained_weights_path, device):
                 state_dict = torch.load(pretrained_weights_path, map_location=device)  # Load the state_dict
@@ -633,11 +648,10 @@ class OmicsESPF_DCSA_Model(nn.Module):
                     load_TCGA_pretrain_weight(self.MLP4omics_dict[omic_type], TCGA_pretrain_weight_path_dict[omic_type], device)
                 else: # Initialize weights with Kaiming uniform initialization, bias with aero
                     self._init_weights(self.MLP4omics_dict[omic_type])
-
-        #apply a linear tranformation to omics embedding to match the hidden size of the drug
-        self.match_drug_dim = nn.Linear(omics_encode_dim_dict[omic_type][-1], DCmatch_emb_dim)
+                #apply a linear tranformation to omics embedding to match the hidden size of the drug
+                self.match_drug_dim = nn.Linear(omics_encode_dim_dict[omic_type][-1], DCmatch_emb_dim)
+                self.match_drug_dim.apply(self._init_weights)
         self.cell_LN = nn.LayerNorm(DCmatch_emb_dim)
-        self.match_drug_dim.apply(self._init_weights)
         self.cell_LN.apply(self._init_weights)
         
 #ESPF            
@@ -850,6 +864,9 @@ class GIN_DCSA_model(nn.Module):
             self.MLP4omics_dict = nn.ModuleDict()
             for omic_type in omics_numfeatures_dict.keys():
                 self.MLP4omics_dict[omic_type] = nn.Sequential( nn.Identity() )  # just pass through the input, no linear combination no transformation
+                #apply a linear tranformation to omics embedding to match the hidden size of the drug
+                self.match_drug_dim = nn.Linear(omics_encode_dim_dict[omic_type][-1], DCmatch_emb_dim)
+                self.match_drug_dim.apply(self._init_weights)
         else:
             def load_TCGA_pretrain_weight(model, pretrained_weights_path, device):
                 state_dict = torch.load(pretrained_weights_path, map_location=device)  # Load the state_dict
@@ -871,11 +888,10 @@ class GIN_DCSA_model(nn.Module):
                     load_TCGA_pretrain_weight(self.MLP4omics_dict[omic_type], TCGA_pretrain_weight_path_dict[omic_type], device)
                 else: # Initialize weights with Kaiming uniform initialization, bias with aero
                     self.MLP4omics_dict[omic_type].apply(self._init_weights)
-
-        #apply a linear tranformation to omics embedding to match the hidden size of the drug
-        self.match_drug_dim = nn.Linear(omics_encode_dim_dict[omic_type][-1], DCmatch_emb_dim)
+                #apply a linear tranformation to omics embedding to match the hidden size of the drug
+                self.match_drug_dim = nn.Linear(omics_encode_dim_dict[omic_type][-1], DCmatch_emb_dim)
+                self.match_drug_dim.apply(self._init_weights)
         self.cell_LN = nn.LayerNorm(DCmatch_emb_dim)
-        self.match_drug_dim.apply(self._init_weights)
         self.cell_LN.apply(self._init_weights)
         
 # Drug GINConvNet
@@ -905,8 +921,9 @@ class GIN_DCSA_model(nn.Module):
 
  
 # Drug_Cell_SelfAttention
-        self.Drug_Cell_SelfAttention = TransformerEncoder_MultipleLayers(DCmatch_emb_dim+num_attention_heads, intermediate_size, num_attention_heads,attention_probs_dropout_prob, hidden_dropout_prob, n_layer)#(128+8,512,8,0.1,0.1)
-
+        if DCSA is True:
+            self.Drug_Cell_SelfAttention = TransformerEncoder_MultipleLayers(DCmatch_emb_dim+num_attention_heads, intermediate_size, num_attention_heads,attention_probs_dropout_prob, hidden_dropout_prob, n_layer)#(128+8,512,8,0.1,0.1)
+            self.Drug_Cell_SelfAttention.apply(self._init_weights)
 # Define the final prediction network 
         self.model_final_add = nn.Sequential(
             nn.Linear(dense_layer_dim[0], dense_layer_dim[1]),
@@ -974,7 +991,6 @@ class GIN_DCSA_model(nn.Module):
             omic_embeddings = torch.cat([omic_embeddings, omics_type_encoding], dim=-1)  # Shape: [bsz, c, DCmatch_emb_dim+1]
     # Final concatenated tensor (drug sequence and omics data with type encoding)
             append_embeddings = torch.cat([Drug_graph_feat, omic_embeddings], dim=1)  # Shape: [bsz, 1+c, DCmatch_emb_dim+1]
-
 
             padding_dim = self.num_attention_heads - 1  # Extra dimensions to add # padding_dim=7
             pad = torch.zeros(append_embeddings.size(0), append_embeddings.size(1), padding_dim, device=append_embeddings.device)

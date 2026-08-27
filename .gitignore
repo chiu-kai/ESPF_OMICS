@@ -13,7 +13,7 @@ MACCS166/
 GDSC_prediction.ipynb
 ESPF/drug_codes_chembl_freq_1500_testtest.txt
 ESPF/subword_units_map_chembl_freq_1500_testtest.csv
-utils/config.py
+# utils/config.py
 utils/config_GDSC.py
 weight.tar
 saved_models/
@@ -25,9 +25,16 @@ inference2server.ipynb
 LeaveOut_cancerType_inference.ipynb
 utils/MACCS.ipynb
 utils/data_preprocessing.ipynb
-
+LeaveOut_cancerType.ipynb
+inference2026_0425.ipynb
+GDSC_inference.ipynb
+Show_Results.ipynb
+Show_GroundTruth.ipynb
+onlyExp instance_df.ipynb
+main_kfold.py
+onlyExp.ipynb
 # Ignore all config files
-utils/config*.py
+# utils/config*.py
 # Ignore all run_experiment scripts
 run_experiment*.sh
 
