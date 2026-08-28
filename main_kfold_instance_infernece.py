@@ -6,34 +6,26 @@ import argparse
 import pandas as pd
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import  DataLoader, Subset
+from torch.utils.data import  DataLoader
 import torch.nn.init as init
 from sklearn.model_selection import train_test_split, StratifiedKFold
 from sklearn.model_selection import KFold
 from sklearn.preprocessing import StandardScaler
 import copy
-import seaborn as sns
-import matplotlib.pyplot as plt
-from scipy import stats
-import random
 import gc
 import os
 import importlib.util
 import pickle
-import torchmetrics
 from scipy.stats import ttest_ind
 import time
 
 from utils.ESPF_drug2emb import drug2emb_encoder
 from utils.Model import Omics_ESPF_Model, OmicsESPF_DCSA_Model, GIN_DCSA_model
-from utils.split_data_id import split_id,repeat_func
 from utils.create_dataloader import OmicsDrugDataset,InstanceResponseDataset
 from utils.train import train, evaluation
 from utils.correlation import correlation_func
-from utils.plot import barplot_perdrug_performance, Inference_Probability_Distribution, loss_curve, correlation_density, Density_Plot_of_AUC_Values, Confusion_Matrix_plot, TCGA_predAUDRC_box_plot_twoClass
-from utils.tools import get_data_value_range,set_seed,get_vram_usage
+from utils.plot import barplot_perdrug_performance, Inference_Probability_Distribution, Confusion_Matrix_plot, TCGA_predAUDRC_box_plot_twoClass
+from utils.tools import set_seed
 print("*"*100)
 
 # 設定命令列引數
@@ -294,28 +286,12 @@ def get_unique_filename(path):
         counter += 1
     return new_path
 
-datasetName_lst = ['TCGA_TransDRP','TCGA_DiSyn', 'TCGA_DAPL', 'TCGA_DeepCDR', 'PDX_DAPL']  # ['TCGA_DeepCDR', 'TCGA_DiSyn', 'TCGA_DAPL', 'PDX_DiSyn', 'PDX_DAPL', 'I-SPY2_DiSyn']
-# 集中管理各 paper 的路徑
-paths = {
-    'TCGA_TransDRP': {'label': "../data/TCGA/TransDRP TCGA drug response samples.csv",
-              'exp': "../data/TCGA/TCGA TransDRP samples EXP1426 rmdup.csv",
-              'DA': f"../data/DAPL/share/pretrain/{DA_Folder}/tcga_latent_results_TransDRP_rmdup.csv"},
-    'TCGA_DiSyn': {'label': "../data/TCGA/DiSyn TCGA drug response match exp file samples.csv",
-              'exp': "../data/TCGA/TCGA DiSyn samples EXP1426.csv",
-              'DA': f"../data/DAPL/share/pretrain/{DA_Folder}/tcga_latent_results_DiSyn_rmdup.csv"},
-    'TCGA_DAPL': {'label': "../data/DAPL/share/TCGA_fromDAPL/TCGA_drug_response_from_DAPL.csv",
-             'exp': "../data/DAPL/share/TCGA_fromDAPL/TCGA_EXP1426_from_DAPL.csv",
-             'DA': f"../data/DAPL/share/pretrain/{DA_Folder}/tcga_latent_results_DAPL_rmdup.csv"},
-    'TCGA_DeepCDR': {'label': "../data/TCGA/TCGA DeepCDR samples.csv",
-                'exp': "../data/TCGA/TCGA DeepCDR samples EXP1426.csv"},
-    'PDX_DAPL': {'label': "../data/DAPL/share/PDTC_fromDAPL/PDX_drug_response_from_DAPL.csv",
-             'exp': "../data/DAPL/share/PDTC_fromDAPL/pdtc_uq1000_feature.csv"},
-}
+
 for datasetName in datasetName_lst:
 
-    label_df_pth = paths[datasetName]['label']
-    EXP_pth = paths[datasetName]['exp'] 
-    DA_EXP_pth = paths[datasetName].get('DA', 'None') # 如果沒有DA路徑，則設為'None'
+    label_df_pth = infer_paths[datasetName]['label']
+    EXP_pth = infer_paths[datasetName]['exp'] 
+    DA_EXP_pth = infer_paths[datasetName].get('DA', 'None') # 如果沒有DA路徑，則設為'None'
     
     if DA_Folder != 'None' and DA_EXP_pth == 'None':
         print(f"Skipping {datasetName}: no DA path available.")# 若 DA_Folder 不為 'None' 但該 dataset 沒有 DA 路徑，則跳過

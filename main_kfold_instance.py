@@ -7,32 +7,28 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import  DataLoader, Subset
+from torch.utils.data import  DataLoader
 import torch.nn.init as init
 from sklearn.model_selection import train_test_split, StratifiedKFold
 from sklearn.model_selection import KFold
 from sklearn.preprocessing import StandardScaler
 import copy
-import seaborn as sns
-import matplotlib.pyplot as plt
+
 from scipy import stats
-import random
 import gc
 import os
 import importlib.util
 import pickle
-import torchmetrics
 from scipy.stats import ttest_ind
 import time
 
 from utils.ESPF_drug2emb import drug2emb_encoder
 from utils.Model import Omics_ESPF_Model, OmicsESPF_DCSA_Model, GIN_DCSA_model
-from utils.split_data_id import split_id,repeat_func
-from utils.create_dataloader import OmicsDrugDataset,InstanceResponseDataset
+from utils.create_dataloader import InstanceResponseDataset
 from utils.train import train, evaluation
 from utils.correlation import correlation_func
 from utils.plot import barplot_perdrug_performance, Inference_Probability_Distribution, loss_curve, correlation_density, Density_Plot_of_AUC_Values, Confusion_Matrix_plot, TCGA_predAUDRC_box_plot_twoClass
-from utils.tools import get_data_value_range,set_seed,get_vram_usage
+from utils.tools import get_data_value_range,set_seed
 print("*"*100)
 
 # 設定命令列引數
@@ -122,13 +118,14 @@ AUC_df_numerical = AUC_df_numerical[AUC_df_numerical['ModelID'].isin(matched_sam
 print("AUC_df_numerical match samples",AUC_df_numerical.shape)
 # median_value = np.nanmedian(AUC_df_numerical.values)  # Directly calculate median, ignoring NaNs
 # print("median_value",median_value)    
-if 'BCE' in criterion.loss_type :
+
+if 'BCE' in criterion.loss_type : # if classification task
     AUC_df = AUC_df_numerical.copy()
     print("AUC_df",AUC_df.shape)
     if "BRD_ID" in drug_df.columns:
         drug_df = drug_df[drug_df["BRD_ID"].isin(AUC_df.columns.str.extract(r"(BRD-[^\)]+)", expand=False))]
     print("drug_df",drug_df.shape)
-else:
+else: # if regression task
     AUC_df = AUC_df_numerical.copy()
 del AUC_df_numerical
 
@@ -137,25 +134,25 @@ if AUCtransform == "-log2":
 if AUCtransform == "-log10":
     AUC_df = -np.log10(AUC_df)
 
-if test is True:
+if test is True: # code for testing purposes, to reduce the dataset size for quicker runs
     drug_df=drug_df[:100]
     AUC_df = AUC_df[AUC_df['drug_name'].isin(drug_df.index)]
     print("drug_df",drug_df.shape)
     print("AUC_df",AUC_df.shape)
 
 if 'weighted' in criterion.loss_type :    
-    if 'BCE' in criterion.loss_type :
+    if 'BCE' in criterion.loss_type :# if classification task
         weighted_threshold = None
         total_samples = (~np.isnan(AUC_df["Label"])).sum().item()
         fewWt_samples = (AUC_df["Label"] == 0).sum().item()
-        moreWt_samples = (AUC_df["Label"] == 1).sum().item()
+        moreWt_samples = (AUC_df["Label"] == 1).sum().item() # give sensitive samples more weight for loss
         few_weight = total_samples / (2 * fewWt_samples)  
         more_weight = total_samples / (2 * moreWt_samples)
-    else:
-        # Set threshold based on the 90th percentile # 將高於threshold的AUC權重增加
+    else: # if regression task
+        #if response is AUDRC, Set threshold based on the 90th percentile # 將高於threshold的AUC權重增加
         weighted_threshold = np.nanpercentile(AUC_df[response], 90)    
         total_samples = (~np.isnan(AUC_df[response])).sum().item()
-        fewWt_samples = (AUC_df[response] > weighted_threshold).sum().item()
+        fewWt_samples = (AUC_df[response] > weighted_threshold).sum().item()# AUC高的samples藥效較好但數量較少
         moreWt_samples = total_samples - fewWt_samples
         few_weight = total_samples / (2 * fewWt_samples)  
         more_weight = total_samples / (2 * moreWt_samples)  
@@ -503,28 +500,12 @@ if model_inference is True:
     model.load_state_dict(BF_best_weight) 
 
 
-datasetName_lst = ['TCGA_TransDRP','TCGA_DiSyn', 'TCGA_DAPL', 'TCGA_DeepCDR', 'PDX_DAPL']  # ['TCGA_DeepCDR', 'TCGA_DiSyn', 'TCGA_DAPL', 'PDX_DiSyn', 'PDX_DAPL', 'I-SPY2_DiSyn']
-# 集中管理各 paper 的路徑
-paths = {
-    'TCGA_TransDRP': {'label': "../data/TCGA/TransDRP TCGA drug response samples.csv",
-              'exp': "../data/TCGA/TCGA TransDRP samples EXP1426 rmdup.csv",
-              'DA': f"../data/DAPL/share/pretrain/{DA_Folder}/tcga_latent_results_TransDRP_rmdup.csv"},
-    'TCGA_DiSyn': {'label': "../data/TCGA/DiSyn TCGA drug response match exp file samples.csv",
-              'exp': "../data/TCGA/TCGA DiSyn samples EXP1426.csv",
-              'DA': f"../data/DAPL/share/pretrain/{DA_Folder}/tcga_latent_results_DiSyn_rmdup.csv"},
-    'TCGA_DAPL': {'label': "../data/DAPL/share/TCGA_fromDAPL/TCGA_drug_response_from_DAPL.csv",
-             'exp': "../data/DAPL/share/TCGA_fromDAPL/TCGA_EXP1426_from_DAPL.csv",
-             'DA': f"../data/DAPL/share/pretrain/{DA_Folder}/tcga_latent_results_DAPL_rmdup.csv"},
-    'TCGA_DeepCDR': {'label': "../data/TCGA/TCGA DeepCDR samples.csv",
-                'exp': "../data/TCGA/TCGA DeepCDR samples EXP1426.csv"},
-    'PDX_DAPL': {'label': "../data/DAPL/share/PDTC_fromDAPL/PDX_drug_response_from_DAPL.csv",
-             'exp': "../data/DAPL/share/PDTC_fromDAPL/pdtc_uq1000_feature.csv"},
-}
+
 for datasetName in datasetName_lst:
 
-    label_df_pth = paths[datasetName]['label']
-    EXP_pth = paths[datasetName]['exp'] 
-    DA_EXP_pth = paths[datasetName].get('DA', 'None') # 如果沒有DA路徑，則設為'None'
+    label_df_pth = infer_paths[datasetName]['label']
+    EXP_pth = infer_paths[datasetName]['exp'] 
+    DA_EXP_pth = infer_paths[datasetName].get('DA', 'None') # 如果沒有DA路徑，則設為'None'
     
     if DA_Folder != 'None' and DA_EXP_pth == 'None':
         print(f"Skipping {datasetName}: no DA path available.")# 若 DA_Folder 不為 'None' 但該 dataset 沒有 DA 路徑，則跳過
@@ -694,137 +675,3 @@ del model
 torch.cuda.set_device("cuda:0")# Set the current device
 gc.collect()# Optionally, force garbage collection to release memory 
 torch.cuda.empty_cache() # Empty PyTorch cache
-'''
-    # CODEAE TCGA data inference
-    drug_list=["cisplatin", "5-fluorouracil", "gemcitabine", "sorafenib", "temozolomide"]
-    drugs_metrics={}
-    for drug_name in drug_list:
-        if DA_Folder != 'None':
-            with open(f"../data/DAPL/share/pretrain/{DA_Folder}/{cohort}/{drug_name}_latent_results.pkl", 'rb') as f:
-                latent_dict = pickle.load(f)
-                CohortExp_df = pd.DataFrame(latent_dict).T # 32
-        else:
-            CohortExp_df = pd.read_csv(f"../data/DAPL/share/{cohort}_fromDAPL/{drug_name}/{cohort.lower()}data{geneNUM}.csv", sep=',', index_col=0) #1426
-        label_df = pd.read_csv(f"../data/DAPL/share/{cohort}_fromDAPL/{drug_name}/{cohort.lower()}label{geneNUM}.csv", sep=',')
-        label_df.columns.values[0] = 'ModelID'
-        label_df.columns.values[1] = 'Label'
-        label_df['drug_name'] = drug_name
-        # label_df = 1 - label_df # make label 0 to 1, 1 to 0 to match regressionpredicted output. after that 0: sensitive, 1: resistant
-        CohortExp_df = CohortExp_df.sort_index(axis=0).sort_index(axis=1)
-        print(f"{cohort}exp {drug_name}data",CohortExp_df.shape)
-        label_df = label_df.sort_index(axis=0).sort_index(axis=1)
-        print(f"label_df {drug_name}data",label_df.shape)
-        for omic_type in include_omics:
-            if DA_Folder != 'None':
-                omics_data_dict["Exp"] = CohortExp_df
-            else:
-                if omic_type == "Exp":
-                    scaler = scaler_dict[omic_type]
-                    omics_data_dict[omic_type] = pd.DataFrame(scaler.transform(CohortExp_df),index=CohortExp_df.index,columns=CohortExp_df.columns) # use fitted CCLE scaler to transform TCGA data
-            # omics_data_tensor_dict[omic_type]  = torch.tensor(omics_data_dict[omic_type].values, dtype=torch.float32).to(device)
-            omics_numfeatures_dict[omic_type] = omics_data_dict[omic_type].shape[1]
-
-            # print(f"{omic_type} tensor shape:", omics_data_tensor_dict[omic_type].shape)
-            print(f"{omic_type} num_features",omics_numfeatures_dict[omic_type])
-
-#         drug_df_path= "../data/DAPL/share/GDSC_drug_merge_pubchem_dropNA_MACCS.csv"
-        drug_df = pd.read_csv( drug_df_path, sep=',')
-        drug_df['name'] = drug_df['name'].str.lower()
-        drug_df = drug_df.set_index('name', drop=False)
-        # get specific drug and ccl
-        drug_df = drug_df[drug_df['name'].str.lower() == drug_name.lower()]
-        
-        print(drug_df)
-        if ESPF is True:
-            print("drug_smiles",drug_df["SMILES"])
-            # 挑出重複的SMILES
-            duplicate =  drug_df["SMILES"][drug_df["SMILES"].duplicated(keep=False)]
-            #ESPF
-            vocab_path = "./ESPF/drug_codes_chembl_freq_1500.txt" # token
-            sub_csv = pd.read_csv(ESPF_file)# token with frequency
-            # 將drug_smiles 使用_drug2emb_encoder function編碼成subword vector
-            drug_df["drug_encode"] = pd.Series(drug_df["SMILES"]).apply(drug2emb_encoder, args=(vocab_path, sub_csv, max_drug_len))
-#             print("drug_encode",type(drug_df["drug_encode"]))
-            drug_df["drug_encode"] = [i[:2] for i in drug_df["drug_encode"].values]
-            print(drug_df["drug_encode"] )
-        else:
-            drug_df["drug_encode"]=[list(map(int, item.split(','))) for item in drug_df["MACCS166bits"].values]
-
-        #--------------------------------------------------------------------------------------------------------------------------
-        num_ccl = list(omics_data_dict.values())[0].shape[0]
-        num_drug = drug_df["drug_encode"].shape[0]
-        print("num_ccl,num_drug: ",num_ccl,num_drug)
-# Fc1c[nH]c(=O)[nH]c1=O 
-
-        set_seed(seed)
-        dataset = InstanceResponseDataset(label_df, omics_data_dict, drug_df, drug_graph, drug_pretrain_freeze_emb, include_omics, device)
-        onedrug_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
-
-        # eval_targets, eval_outputs,predAUCwithUnknownGT, AttenScorMat_DrugSelf, AttenScorMat_DrugCellSelf,eval_outputs_before_final_activation_list, mean_batch_eval_lossWOpenalty
-        (eval_targets, eval_outputs,predAUCwithUnknownGT,
-        AttenScorMat_DrugSelf ,AttenScorMat_DrugCellSelf,
-        eval_outputs_before_final_activation_list,  
-        mean_batch_eval_loss_WO_penalty)  = evaluation(model, None,None,
-                                                    criterion, onedrug_loader, device,ESPF,Drug_SelfAttention, 
-                                                    weighted_threshold, few_weight, more_weight, 
-                                                    outputcontrol='inference')
-        # Calculate classification metrics                                            
-        drugs_metrics[drug_name], _  = metrics_calculator(torch.cat(eval_targets), torch.cat(eval_outputs), BF_best_prob_threshold, metric, dataset="test")
-        drugs_metrics[drug_name]["eval_targets"]=eval_targets
-        drugs_metrics[drug_name]["eval_outputs"]=eval_outputs
-        drugs_metrics[drug_name]["eval_outputs_before_final_activation_list"]=eval_outputs_before_final_activation_list
-        drugs_metrics[drug_name][criterion.loss_type] = mean_batch_eval_loss_WO_penalty
-
-        if 'BCE' in criterion.loss_type :
-            (test_cm ,  test_GT_0_count, test_GT_1_count, 
-            test_pred_binary_0_count, test_pred_binary_1_count ) =metrics_calculator.confusion_matrix(torch.cat(eval_targets), torch.cat(eval_outputs), BF_best_prob_threshold)
-
-            drugs_metrics[drug_name]["CM"] = test_cm
-            # # plot confusion matrix
-            cm_datas = [(test_cm, cohort, 'Blues')]
-            Confusion_Matrix_plot(cm_datas,hyperparameter_folder_path=hyperparameter_folder_path,datasetName=datasetName)
-
-        else:#regression use prob_threshold to get binary outcome
-            df = pd.DataFrame({'predicted AUDRC': torch.cat(eval_outputs).cpu().numpy(),
-                    'Label': torch.cat(eval_targets).cpu().numpy()})
-            # Perform t-test between the two groups
-            sensitive = df[df['Label'] == 1]['predicted AUDRC']
-            resistant = df[df['Label'] == 0]['predicted AUDRC']
-            t_stat, p_val = ttest_ind(sensitive, resistant)
-            drugs_metrics[drug_name]["pvalue"]= p_val
-            if p_val<=0.05:
-                TCGA_predAUDRC_box_plot_twoClass(drug_name,cohort,df,sensitive,resistant,p_val,hyperparameter_folder_path)
-        # not a reasonable way to calculate AUROC and AUPRC to explain the model performance
-           
-            
-    
-    output_file = f"{hyperparameter_folder_path}/BF{BF}_{cohort}_inference_result.txt"
-    with open(output_file, "w") as file:
-        if 'BCE' in criterion.loss_type :
-            for drug_name, metrics in drugs_metrics.items():
-                file.write(f"\n{drug_name}\n")
-                file.write(f"BF_best_prob_threshold: {BF_best_prob_threshold} according to {metric}\n")
-                file.write(f"  test {criterion.loss_type}loss: {metrics[criterion.loss_type].item():.6f}\n")
-                for key in metrics_type_set:
-                    file.write(f"  '{key}': {metrics[key].item():.4f}\n")
-                for key in ["eval_targets","eval_outputs_before_final_activation_list","eval_outputs"]:
-                    file.write(f"\n{key}\n{metrics[key][0][:20]}\n\n")
-        else:
-            for drug_name, metrics in drugs_metrics.items():
-                file.write(f"{drug_name}\n")
-                file.write(f"  test {criterion.loss_type}loss: {metrics[criterion.loss_type].item():.6f}\n")
-                if metrics['pvalue'].item() <= 0.05:
-                    file.write(f"\n pvalue <= 0.05 ")
-                else:
-                    file.write(f"\n pvalue > 0.05 ")
-                file.write(f"{drug_name} pvalue: {metrics['pvalue'].item():.4f}\n\n")
-                for key in ["eval_targets","eval_outputs_before_final_activation_list","eval_outputs"]:
-                    file.write(f"\n{key}\n{metrics[key][0][:20]}\n")
-                        
-                    
-    os.chmod(output_file, 0o444)
-    del model
-    torch.cuda.set_device("cuda:0")# Set the current device
-    gc.collect()# Optionally, force garbage collection to release memory 
-    torch.cuda.empty_cache() # Empty PyTorch cache
-'''

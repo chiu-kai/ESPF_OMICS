@@ -44,7 +44,9 @@ project_root/
 
 ## Training
 
-Run the following command to train and inference the model:
+step1: set all the hyperparameters in utils/config.py
+
+step2: Run the following command to train and inference the model:
 
 ```bash
 python3 ./main_kfold_instance.py --config utils/config.py
