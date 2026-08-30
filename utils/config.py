@@ -36,7 +36,7 @@ ESPF_file = "./ESPF/(NAN) subword_units_map_chembl_freq_1500.csv" #(NAN) subword
 '''if classification task, AUC_df_path_numerical == AUC_df_path'''
 AUC_df_path_numerical = "../data/GDSC/GDSC2_fitted_dose_response_27Oct23 from GDSC MaxScreen threshold ModelID966 drug230 samples145655 down_balanced_combined.csv" # gdsc1+2_ccle_z-score　gdsc1+2_ccle_AUC
 AUC_df_path = "../data/GDSC/GDSC2_fitted_dose_response_27Oct23 from GDSC MaxScreen threshold ModelID966 drug230 samples145655 down_balanced_combined.csv"
-response_file = 'down_balanced_combined'# down/up _ high/even/low 、imbalanced
+response_file = 'down_balanced_combined'# down/up _ high/even/low 、imbalanced # for naming folder_path
 omics_files = {
     'Mut': "",
     'Exp': "../data/DAPL/share/ccle_uq1000_feature_sorted.csv", # "../data/CCLE/CCLE_exp_476samples_4692genes.txt",
@@ -49,7 +49,7 @@ omics_numfeatures_dict = {}
 omics_encode_dim_dict ={'Mut':[128,32],'Exp':[128,32],  # Dr.Chiu:exp[500,200,50]  [1000,100,50] 'Mut':[128,32],'Exp':[128,32], 'Mut':[1000,100,50],'Exp':[1000,100,50],
                         'CN':[100,50,30], 'Eff':[100,50,30], 'Dep':[100,50,30], 'Met':[100,50,30]}
 
-# TCGA pretrain weight load or not 
+# TCGA AE pretrain weight load or not 
 TCGA_pretrain_weight_path_dict = None #{'Mut': "./results/Encoder_tcga_mut_1000_100_50_best_loss_0.0066.pt",
                                   #'Exp': "./results/Encoder_tcga_exp_128_32_best_loss_0.2182988.pt", # "./results/Encoder_tcga_exp_128_32_best_loss_0.2182988.pt", "./results/Encoder_tcga_exp_1000_100_50_best_loss_0.7.pt"
                                   # Add more omics types and paths as needed

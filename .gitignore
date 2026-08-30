@@ -36,13 +36,13 @@ onlyExp.ipynb
 ## Ignore all run_experiment scripts
 run_experiment*.sh
 
-utils\convert_mutation_toBinary.ipynb
-utils\data_repeat_to_instance.py
-utils\get_CIDandSMILES_from_Drug_Name.ipynb
-utils\get_PDAC_MACCS.ipynb
-utils\LOBICO .ipynb
-utils\match _ccl.py
-utils\split_data_id.py
+utils/convert_mutation_toBinary.ipynb
+utils/data_repeat_to_instance.py
+utils/get_CIDandSMILES_from_Drug_Name.ipynb
+utils/get_PDAC_MACCS.ipynb
+utils/LOBICO .ipynb
+utils/match _ccl.py
+utils/split_data_id.py
 
 #-----old----
 ESPF_Train_byCCL_drug_mut_AUC_1fold_old.ipynb
